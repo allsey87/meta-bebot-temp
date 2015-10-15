@@ -46,6 +46,7 @@ MEDIA_TOOLS_INSTALL = " \
   raw2rgbpnm \
   v4l-utils \
   yavta \
+  blocktracker \
 "
 
 GRAPHICS_LIBS = " \
@@ -64,6 +65,7 @@ UTILITIES_INSTALL = " \
   nano \
   packagegroup-cli-tools \
   packagegroup-cli-tools-debug \
+  picocom \
   sudo \
   tar \
   vim \
