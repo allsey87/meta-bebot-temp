@@ -11,7 +11,8 @@
 #include <opencv2/core/core.hpp>
 #include <linux/videodev2.h>
 
-namespace jafp {
+class CISSCaptureDevice {
+public:
 
    struct OvVideoMode {
       int width;
@@ -25,74 +26,70 @@ namespace jafp {
       unsigned int length;
       unsigned int offset;
    };
+   
+public:
 
-   class OvVideoCapture {
-   public:
-	
-      // Various constants
-      static const int NumBuffers = 2;
-      static const int DefaultInputNo = 0;
-      static const int DefaultFormat = V4L2_PIX_FMT_UYVY;
-      static const int DefaultFormatChannels = 2;
-	
-      // Modes
-      static const OvVideoMode OV_MODE_640_480_30;
-      static const OvVideoMode OV_MODE_320_240_30;
-      static const OvVideoMode OV_MODE_1280_720_30;
-	
-      OvVideoCapture(const char* pch_device, const OvVideoMode& mode = OV_MODE_1280_720_30);
-      virtual ~OvVideoCapture();
-	
-      // Opens the device (OV5640 sensor connected to the MIPI CSI2 channel).
-      // No parameters are given, as we expect the device to have a fixed device id
-      bool open();
-	
-      // Relase the device. 
-      // Free'es the internal frame buffer.
-      bool release();
-	
-      // Returns true if the device already has been opened. 
-      inline bool isOpened() const { return is_opened_; }
+   // Various constants
+   static const int NumBuffers = 2;
+   static const int DefaultInputNo = 0;
+   static const int DefaultFormat = V4L2_PIX_FMT_UYVY;
+   static const int DefaultFormatChannels = 2;
 
-      // Gets a property from the capture device
-      double get(int propId);
+   // Modes
+   static const OvVideoMode OV_MODE_640_480_30;
+   static const OvVideoMode OV_MODE_320_240_30;
+   static const OvVideoMode OV_MODE_1280_720_30;
+   
+   CISSCaptureDevice(const char* pch_device, const OvVideoMode& mode = OV_MODE_1280_720_30);
+   virtual ~CISSCaptureDevice();
 
-      // Grabs a single frame from the image sensor
-      bool grab();
-	
-      // Decodes the grabbed video frame and returns it to the given
-      // image structure.
-      bool retrieve(cv::Mat& image);
-	
-      // Grabs, decodes and returns the grabbed image.
-      bool read(cv::Mat& image);
+   // Opens the device (OV5640 sensor connected to the MIPI CSI2 channel).
+   // No parameters are given, as we expect the device to have a fixed device id
+   bool open();
 
-      // Short hand for `read`, to use the capture device liek `cin`.
-      inline OvVideoCapture& operator >> (cv::Mat& image) {
-         read(image);
-         return (*this);
-      }
+   // Relase the device. 
+   // Free'es the internal frame buffer.
+   bool release();
 
-   private:
-      int fd_;
-      int current_buffer_index_;
-      int frame_size_;
-      bool is_opened_;
-      unsigned char* buffer_;
+   // Returns true if the device already has been opened. 
+   inline bool isOpened() const { return is_opened_; }
 
-      OvFrameBuffer buffers_[NumBuffers];
-      const OvVideoMode& mode_;
+   // Gets a property from the capture device
+   double get(int propId);
 
-      bool open_internal();
-      bool start_capturing();
+   // Grabs a single frame from the image sensor
+   bool grab();
 
-      const unsigned int m_unScale;
+   // Decodes the grabbed video frame and returns it to the given
+   // image structure.
+   bool retrieve(cv::Mat& image);
 
-      const char* m_pchDevice;
+   // Grabs, decodes and returns the grabbed image.
+   bool read(cv::Mat& image);
 
-   };
+   // Short hand for `read`, to use the capture device liek `cin`.
+   inline CISSCaptureDevice& operator >> (cv::Mat& image) {
+      read(image);
+      return (*this);
+   }
 
-}
+private:
+   int fd_;
+   int current_buffer_index_;
+   int frame_size_;
+   bool is_opened_;
+   unsigned char* buffer_;
 
+   OvFrameBuffer buffers_[NumBuffers];
+   const OvVideoMode& mode_;
+
+   bool open_internal();
+   bool start_capturing();
+
+   const unsigned int m_unScale;
+
+   const char* m_pchDevice;
+
+};
 
 #endif

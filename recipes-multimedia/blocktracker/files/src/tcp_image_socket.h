@@ -10,6 +10,8 @@ public:
 	int Open(const char* host, int port);
 
 	~CTCPImageSocket();
+	
+	bool IsConnected();
 
 	int Write(uint8_t* pun_data, unsigned int un_width, unsigned int un_height);
 

@@ -17,11 +17,12 @@
 
 #include "opencv2/opencv.hpp"
 
-namespace jafp {
-
-   const OvVideoMode OvVideoCapture::OV_MODE_320_240_30 = { 320, 240, 30, 1 };
-   const OvVideoMode OvVideoCapture::OV_MODE_640_480_30 = { 640, 480, 30, 0 };
-   const OvVideoMode OvVideoCapture::OV_MODE_1280_720_30 = { 1280, 720, 30, 0 };
+   const CISSCaptureDevice::OvVideoMode CISSCaptureDevice::OV_MODE_640_480_30 =
+      { 640, 480, 30, 0 };
+   const CISSCaptureDevice::OvVideoMode CISSCaptureDevice::OV_MODE_320_240_30 =
+      { 320, 240, 30, 1 };
+   const CISSCaptureDevice::OvVideoMode CISSCaptureDevice::OV_MODE_1280_720_30 = 
+      { 1280, 720, 30, 0 };
 
    static void to_gray(const unsigned char* input, unsigned char* output, int length) {
       int i = 0, j = 0;
@@ -31,19 +32,19 @@ namespace jafp {
       }
    }
 
-   OvVideoCapture::OvVideoCapture(const char* pch_device, const OvVideoMode& mode) :
+   CISSCaptureDevice::CISSCaptureDevice(const char* pch_device, const OvVideoMode& mode) :
       m_pchDevice(pch_device),
       mode_(mode),
       m_unScale(2) {}
 
-   OvVideoCapture::~OvVideoCapture() {
+   CISSCaptureDevice::~CISSCaptureDevice() {
       if (buffer_) {
          delete[] buffer_;
       }
       release();
    }
 
-   bool OvVideoCapture::open() {
+   bool CISSCaptureDevice::open() {
       if(!open_internal()) {
          return false;
       }
@@ -54,7 +55,7 @@ namespace jafp {
       return true;
    }
 
-   bool OvVideoCapture::release() {
+   bool CISSCaptureDevice::release() {
       if (isOpened()) {
          int i;
          enum v4l2_buf_type type;
@@ -70,7 +71,7 @@ namespace jafp {
       return true;
    }
 
-   bool OvVideoCapture::grab() {
+   bool CISSCaptureDevice::grab() {
       struct v4l2_buffer capture_buf;
 
       // Give it a shot if the device hasn't been opened
@@ -98,7 +99,7 @@ namespace jafp {
       return true;
    }
 
-   double OvVideoCapture::get(int propId) {
+   double CISSCaptureDevice::get(int propId) {
       switch(propId) {
       case CV_CAP_PROP_FRAME_WIDTH:
          return mode_.width / m_unScale;
@@ -113,7 +114,7 @@ namespace jafp {
 
    }
 
-   bool OvVideoCapture::retrieve(cv::Mat& image) {
+   bool CISSCaptureDevice::retrieve(cv::Mat& image) {
 		
       if (!grab()) {
          return false;
@@ -133,11 +134,11 @@ namespace jafp {
       return true;
    }
 
-   bool OvVideoCapture::read(cv::Mat& image) {
+   bool CISSCaptureDevice::read(cv::Mat& image) {
       return retrieve(image);
    }
 
-   bool OvVideoCapture::start_capturing() {
+   bool CISSCaptureDevice::start_capturing() {
       unsigned int i;
       struct v4l2_buffer buf;
       enum v4l2_buf_type type;
@@ -147,7 +148,7 @@ namespace jafp {
          buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
          buf.memory = V4L2_MEMORY_MMAP;
          buf.index = i;
-	 fprintf(stderr, "%s: VIDIOC_QUERYBUF %d\n", m_pchDevice, i);
+
          if (ioctl(fd_, VIDIOC_QUERYBUF, &buf) < 0) {
             return false;
          }
@@ -166,23 +167,19 @@ namespace jafp {
          buf.memory = V4L2_MEMORY_MMAP;
          buf.m.offset = buffers_[i].offset;
 
-	 fprintf(stderr, "%s: VIDIOC_QBUF %d\n", m_pchDevice, i);
          if (ioctl (fd_, VIDIOC_QBUF, &buf) < 0) {
             return false;
          }
       }
-
       type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-      fprintf(stderr, "%s: VIDIOC_STREAMON\n", m_pchDevice);
       if (ioctl (fd_, VIDIOC_STREAMON, &type) < 0) {
-	 fprintf(stderr, "%s: VIDIOC_STREAMON errno %d\n", m_pchDevice, errno);
          return false;
       }
 
       return true;
    }
 
-   bool OvVideoCapture::open_internal() {
+   bool CISSCaptureDevice::open_internal() {
       struct v4l2_format fmt;
       struct v4l2_requestbuffers req;
       struct v4l2_streamparm parm;	
@@ -193,11 +190,9 @@ namespace jafp {
       // Mode's size combined with default format's number of channels
       frame_size_ = mode_.width * mode_.height * DefaultFormatChannels;
       buffer_ = new unsigned char[frame_size_];
-      fprintf(stderr, "%s: open\n", m_pchDevice);
       if ((fd_ = ::open(m_pchDevice, O_RDWR, 0)) < 0) {
          return false;
       }
-      fprintf(stderr, "%s: VIDIOC_S_INPUT\n", m_pchDevice);
       if (ioctl(fd_, VIDIOC_S_INPUT, &input) < 0) {
          close(fd_);
          return false;
@@ -211,13 +206,11 @@ namespace jafp {
       fmt.fmt.pix.pixelformat = DefaultFormat;
       fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-      fprintf(stderr, "%s: VIDIOC_S_FMT\n", m_pchDevice);
       if (ioctl (fd_, VIDIOC_S_FMT, &fmt) < 0){
          close(fd_);
          return false;
       }
 
-      fprintf(stderr, "%s: VIDIOC_G_FMT\n", m_pchDevice);
       if (ioctl(fd_, VIDIOC_G_FMT, &fmt) < 0) {
          close(fd_);
          return false;
@@ -228,16 +221,13 @@ namespace jafp {
       req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
       req.memory= V4L2_MEMORY_MMAP;
 
-      fprintf(stderr, "%s: VIDIOC_REQBUFS\n", m_pchDevice);
       if (ioctl (fd_, VIDIOC_REQBUFS, &req) < 0) {
          return false;
       }
-      fprintf(stderr, "%s: COUNT\n", m_pchDevice);
+
       if (req.count < 2) {
          return false;
       }
       return true;
    }
-
-}
 

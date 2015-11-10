@@ -1,5 +1,6 @@
 
 #include <cstdio>
+#include <unistd.h>
 
 #include "packet_control_interface.h"
 
@@ -7,6 +8,9 @@ CPacketControlInterface::CPacket::EType CPacketControlInterface::CPacket::GetTyp
    switch(m_unTypeId) {
    case 0x00:
       return EType::GET_UPTIME;
+      break;
+   case 0x01:
+      return EType::GET_BATT_LVL;
       break;
    case 0x10:
       return EType::SET_DDS_ENABLE;
@@ -94,7 +98,7 @@ void CPacketControlInterface::SendPacket(CPacket::EType e_type,
    punTxBuffer[unTxBufferPointer++] = ComputeChecksum(punTxBuffer, TX_COMMAND_BUFFER_LENGTH);
    punTxBuffer[unTxBufferPointer++] = POSTAMBLE1;
    punTxBuffer[unTxBufferPointer++] = POSTAMBLE2;
-
+ 
    for(uint8_t unIdx = 0; unIdx < unTxBufferPointer; unIdx++) {
       m_cUARTSocket.Write(&punTxBuffer[unIdx], 1);
    }
@@ -111,7 +115,6 @@ void CPacketControlInterface::ProcessInput() {
    bool bBufAdjustReq = false;
    uint8_t unRxByte = 0;
    uint8_t m_unReparseOffset = RX_COMMAND_BUFFER_LENGTH;
- 
 
    if(m_eState == EState::RECV_COMMAND) {
       bBufAdjustReq = true;
@@ -217,6 +220,22 @@ void CPacketControlInterface::ProcessInput() {
       bBufAdjustReq = bBufAdjustReq || (m_unRxBufferPointer == RX_COMMAND_BUFFER_LENGTH);
    }
 }
+
+bool CPacketControlInterface::WaitForPacket(uint16_t un_poll_interval,
+                                            uint8_t un_attempts) {
+   while(un_attempts > 0) {
+      usleep(un_poll_interval);
+      ProcessInput();
+      if(GetState() == EState::RECV_COMMAND) {
+         return true;
+      }
+      else {
+         un_attempts--;
+      }
+   }
+   return false;
+}
+
 
 const char* CPacketControlInterface::StateToString(CPacketControlInterface::EState e_state) {
    switch(e_state) {

@@ -24,6 +24,7 @@
 #define CHECKSUM_OFFSET -3
 
 #include "uart_socket.h"
+#include <string>
 
 class CPacketControlInterface {
 
@@ -42,7 +43,7 @@ public:
       
       enum class EType : uint8_t {
          GET_UPTIME = 0x00,
-
+         GET_BATT_LVL = 0x01,
          /*************************************/
          /* Sensor-Actuator Microcontroller   */
          /*************************************/
@@ -107,15 +108,25 @@ public:
    };
 
 public:
-   CPacketControlInterface(CUARTSocket& c_uart_socket) :
+   
+   CPacketControlInterface(const std::string& str_id, const std::string& str_device, uint32_t un_baud) :
+      m_strId(str_id),
       m_eState(EState::SRCH_PREAMBLE1),
       m_unRxBufferPointer(0),
       m_unUsedBufferLength(0),
       m_unReparseOffset(RX_COMMAND_BUFFER_LENGTH),
       m_cPacket(0xFF, 0, 0),
-      m_cUARTSocket(c_uart_socket) {}
+      m_cUARTSocket(str_device, un_baud) {}
+
+   bool Open() {
+      return (m_cUARTSocket.Open() == 0 ? true : false);
+   }
 
    EState GetState() const;
+   
+   const std::string& GetId() const {
+      return m_strId;
+   }
 
    static const char* StateToString(EState e_state);
 
@@ -123,15 +134,20 @@ public:
   
    void ProcessInput();
 
+   bool WaitForPacket(uint16_t un_poll_interval,
+                      uint8_t un_attempts);
+
    void Reset();
 
    void SendPacket(CPacket::EType e_type,
-                   const uint8_t* pun_tx_data = NULL,
+                   const uint8_t* pun_tx_data = nullptr,
                    uint8_t un_tx_data_length = 0);
       
 private:
    uint8_t ComputeChecksum(uint8_t* pun_buf_data, uint8_t un_buf_length);
 
+   std::string m_strId;
+   
    EState m_eState;
 
    uint8_t m_unRxBufferPointer;
@@ -141,7 +157,7 @@ private:
    
    CPacket m_cPacket;
 
-   CUARTSocket& m_cUARTSocket;
+   CUARTSocket m_cUARTSocket;
    
 
 };
