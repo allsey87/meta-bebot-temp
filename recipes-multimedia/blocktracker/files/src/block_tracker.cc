@@ -228,6 +228,9 @@ int CBlocktracker::Init(int n_arg_count, char* ppch_args[]) {
    }
    std::cerr << "OK" << std::endl;
 
+   /* Create the blocktracker sensor instance */
+   m_pcBlockSensor = new CBlockSensor;
+
    /* Initialisation was successful */
    return 0;
 }
@@ -241,7 +244,30 @@ void CBlocktracker::Exec() {
    for(;;) {
 
       *m_pcISSCaptureDevice >> cCurrentFrame;
-      *m_pcTCPImageSocket << cCurrentFrame;
+
+
+      //m_pcBlockSensor->SetCameraPosition(); ??
+      m_pcBlockSensor->ProcessFrame(cCurrentFrame);
+      /*
+      vecBlock = CBlockSensor::ExtractBlocks(cCurrentFrame);
+      CBlockTracker::SmoothAndTrackTargets();
+      // Cluster targets into structures
+      CStructureDetectionAlgorithm::GenerateStructures();
+      for(const CMicroRule& c_rule : vecMicroRules) {
+         if(c_rule.Matches(set_of_detected_structures)) {
+            m_pcActiveRule = &c_rule;
+            break;
+         }
+      }
+      */
+
+      for(const CBlockSensor::SBlock& s_block : m_pcBlockSensor->GetBlocks()) {
+         CBlockSensor::AnnotateFrame(cCurrentFrame, s_block);
+      }
+
+      if(m_pcTCPImageSocket != nullptr) {
+         *m_pcTCPImageSocket << cCurrentFrame;
+      }
 
       if(bInterruptEvent) {
          std::cerr << "Shutdown: request acknowledged" << std::endl;
