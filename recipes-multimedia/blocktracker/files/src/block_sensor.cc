@@ -1,9 +1,6 @@
 
 #include "block_sensor.h"
 
-#include <iostream>
-#include <iomanip>
-
 /****************************************/
 /****************************************/
 
@@ -24,9 +21,10 @@ CBlockSensor::CBlockSensor() {}
 /****************************************/
 /****************************************/
 
-void CBlockSensor::ProcessFrame(cv::Mat& c_grayscale_frame) {
+void CBlockSensor::DetectBlocks(const cv::Mat& c_grayscale_frame,
+                                std::list<CBlockSensor::SBlock>& lst_blocks) {
    /* Clear the vector of existing blocks */
-   m_vecBlocks.clear();
+   lst_blocks.clear();
 
    /* GetTags extract tags from frame */
    std::vector<AprilTags::TagDetection> vecDetections =
@@ -88,7 +86,7 @@ void CBlockSensor::ProcessFrame(cv::Mat& c_grayscale_frame) {
 
       /* allocate tag to existing block or create a new block */
       bool bBelongsToExistingBlock = false;
-      for(SBlock& s_existing_block : m_vecBlocks) {
+      for(SBlock& s_existing_block : lst_blocks) {
          float fInterblockDist = sqrt(pow(cMT(0,3) - s_existing_block.X, 2) +
                                       pow(cMT(1,3) - s_existing_block.Y, 2) +
                                       pow(cMT(2,3) - s_existing_block.Z, 2));
@@ -101,81 +99,20 @@ void CBlockSensor::ProcessFrame(cv::Mat& c_grayscale_frame) {
 
       /* if the detected block doesn't already exist add it to the collection */
       if(!bBelongsToExistingBlock) {
-         m_vecBlocks.push_back(SBlock{{sTag}, cMT(0,3), cMT(1,3), cMT(02,3), fYaw, fPitch, fRoll});
+         /* compute the 2D coordinates of the block */
+         std::vector<cv::Point3f> vecCentrePoint = {cv::Point3f(0,0,0)};
+         std::vector<cv::Point2f> vecCentrePixel;
+         cv::projectPoints(vecCentrePoint,
+                           cCamToBlockRotation,
+                           cCamToBlockTranslation,
+                           m_cCameraMatrix,
+                           m_cDistortionParameters,
+                           vecCentrePixel);
+         /* Create and initialise a new block */
+         lst_blocks.emplace_back(cMT(0,3), cMT(1,3), cMT(2,3), fYaw, fPitch, fRoll);
+         lst_blocks.back().Tags = {sTag};
+         lst_blocks.back().Coordinates = std::pair<float, float>(vecCentrePixel[0].x,
+                                                                 vecCentrePixel[0].y);
       }
    }
-
-   unsigned int unCount = 0;
-   for(const SBlock& s_existing_block : m_vecBlocks) {
-      for(const STag& s_tag : s_existing_block.Tags) {
-         std::ostringstream cStream;
-         cStream << "[" << unCount << "]";
-         AnnotateFrame(c_grayscale_frame, s_tag, cStream.str());
-      }
-      unCount++;
-   }
-}
-
-/****************************************/
-/****************************************/
-
-const std::vector<CBlockSensor::SBlock>& CBlockSensor::GetBlocks() const {
-   return m_vecBlocks;
-}
-
-/****************************************/
-/****************************************/
-
-
-void CBlockSensor::AnnotateFrame(cv::Mat& c_grayscale_frame, const SBlock& s_block) {
-   /* project points is checking correctness */
-   /*
-   std::vector<cv::Point3f> TgtPts;
-   std::vector<cv::Point2f> outImgPoints;
-      
-   TgtPts.push_back(cv::Point3f( 0.0275,  0.0275, 0.0275));
-   TgtPts.push_back(cv::Point3f( 0.0275, -0.0275, 0.0275));
-   TgtPts.push_back(cv::Point3f(-0.0275, -0.0275, 0.0275));
-   TgtPts.push_back(cv::Point3f(-0.0275,  0.0275, 0.0275));
-   TgtPts.push_back(cv::Point3f( 0.0275,  0.0275, -0.0275));
-   TgtPts.push_back(cv::Point3f( 0.0275, -0.0275, -0.0275));
-   TgtPts.push_back(cv::Point3f(-0.0275, -0.0275, -0.0275));
-   TgtPts.push_back(cv::Point3f(-0.0275,  0.0275, -0.0275));
-
-   cv::projectPoints(TgtPts, cb_rvec, cb_tvec, cameraMatrix, distParam, outImgPoints);
-
-   cv::line(image_gray, outImgPoints[0], outImgPoints[1], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[1], outImgPoints[2], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[2], outImgPoints[3], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[3], outImgPoints[0], cv::Scalar(255,255,255,0), 2);
-
-   cv::line(image_gray, outImgPoints[4], outImgPoints[5], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[5], outImgPoints[6], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[6], outImgPoints[7], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[7], outImgPoints[4], cv::Scalar(255,255,255,0), 2);
-
-   cv::line(image_gray, outImgPoints[0], outImgPoints[4], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[1], outImgPoints[5], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[2], outImgPoints[6], cv::Scalar(255,255,255,0), 2);
-   cv::line(image_gray, outImgPoints[3], outImgPoints[7], cv::Scalar(255,255,255,0), 2);
-   */
-}
-
-/****************************************/
-/****************************************/
-
-void CBlockSensor::AnnotateFrame(cv::Mat& c_grayscale_frame, const STag& s_tag, const std::string& s_text = "") {
-   for(uint8_t un_corner_idx = 0; un_corner_idx < 4; un_corner_idx++) {
-      cv::line(c_grayscale_frame,
-               cv::Point2f(s_tag.Corners[un_corner_idx].first, s_tag.Corners[un_corner_idx].second),
-               cv::Point2f(s_tag.Corners[(un_corner_idx + 1) % 4].first, s_tag.Corners[(un_corner_idx + 1) % 4].second),
-               cv::Scalar(255,255,255,0));
-   }
-   cv::putText(c_grayscale_frame,
-               s_text,
-               cv::Point2f(s_tag.Center.first + 10, s_tag.Center.second + 10),
-               cv::FONT_HERSHEY_SIMPLEX,
-               1,
-               cv::Scalar(255,255,255),
-               2);
 }

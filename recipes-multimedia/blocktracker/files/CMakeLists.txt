@@ -17,8 +17,10 @@ include_directories(${AprilTags_INCLUDE_DIR})
 
 # Build the application
 add_executable(blocktracker
-               src/block_tracker.cc
+               src/block_demo.cc
                src/block_sensor.cc
+               src/block_tracker.cc
+               src/frame_annotator.cc
 				   src/tcp_image_socket.cc
 				   src/packet_control_interface.cc
 				   src/uart_socket.cc)

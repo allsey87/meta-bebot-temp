@@ -16,9 +16,14 @@ public:
    };
 
    struct SBlock {
+      /* constructor */
+      SBlock(float f_x, float f_y, float f_z, float f_yaw, float f_pitch, float f_roll) :
+         X(f_x), Y(f_y), Z(f_z), Yaw(f_yaw), Pitch(f_pitch), Roll(f_roll) {}
       /* Set of tags used to identify the block */
       std::vector<STag> Tags;
-      /* Block coordinates and orientation */
+      /* Block 2D coordinates in frame */
+      std::pair<float, float> Coordinates;
+      /* Block 3D coordinates and orientation */
       float X, Y, Z, Yaw, Pitch, Roll;
    };
    
@@ -26,25 +31,14 @@ public:
 
    CBlockSensor();
 
-   void ProcessFrame(cv::Mat& c_grayscale_frame);
-
-   const std::vector<SBlock>& GetBlocks() const;
-
-   static void AnnotateFrame(cv::Mat& c_grayscale_frame, const STag& s_tag, const std::string& s_text);
-
-   static void AnnotateFrame(cv::Mat& c_grayscale_frame, const SBlock& s_block);
+   void DetectBlocks(const cv::Mat& c_grayscale_frame, std::list<SBlock>& lst_blocks);
 
 private:
-   std::vector<SBlock> m_vecBlocks;
 
    /* Initialise select the AprilTag tag family and init the detector */
    AprilTags::TagCodes m_cTagCodes = AprilTags::TagCodes(AprilTags::tagCodes36h11);
    AprilTags::TagDetector m_cTagDetector = AprilTags::TagDetector(m_cTagCodes);
 
-   /* image size in pixels */
-   const uint16_t m_unWidth = 640; 
-   const uint16_t m_unHeight = 360;
-   
    /* April tag (w.r.t. black frame) and block side length in meters */
    const float m_fTagSize = 0.024;
    const float m_fBlockSideLength = 0.055;

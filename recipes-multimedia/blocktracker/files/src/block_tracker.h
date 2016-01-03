@@ -1,52 +1,68 @@
 #ifndef BLOCK_TRACKER_H
 #define BLOCK_TRACKER_H
 
-#include <string>
+#include "block_sensor.h"
 
-class CPacketControlInterface;
-class CTCPImageSocket;
-class CBlockSensor;
-class CISSCaptureDevice;
+#include <algorithm>
 
-class CBlocktracker {
+/* Parameters
+
+   1. How many observations to hold
+   2. Frame bounds
+   3. Coefficient converting pixels to distance
+   4. Resampling ratio
+   5. Time to live
+
+*/
+
+class CBlockTracker {
+
 public:
-   CBlocktracker() :
-      m_bAnnotateImages(false),
-      m_pcPowerManagementInterface(nullptr),
-      m_pcSensorActuatorInterface(nullptr),
-      m_pcManipulatorInterface(nullptr),
-      m_pcISSCaptureDevice(nullptr),
-      m_pcTCPImageSocket(nullptr),
-      m_pcBlockSensor(nullptr) {}
-   
-   static const std::string& GetUsageString() {
-      return m_strUsage;
-   }
+   CBlockTracker(unsigned int un_frame_height,
+                 unsigned int un_frame_width,
+                 unsigned int un_tracking_depth,
+                 float f_association_recursion_ratio,
+                 float f_pixel_to_distance_coefficient) :
+      m_unFrameHeight(un_frame_height),
+      m_unFrameWidth(un_frame_width),
+      m_unTrackingDepth(un_tracking_depth),
+      m_fAssociationRecursionRatio(f_association_recursion_ratio),
+      m_fPixelToDistanceCoefficient(f_pixel_to_distance_coefficient) {}
 
-   static const std::string& GetIntroString() {
-      return m_strIntro;
-   } 
-   
-   int Init(int n_arg_count, char* pch_args[]); 
-   
-   void Exec();
+   struct STarget {
+      STarget(const CBlockSensor::SBlock& s_block) :
+         FramesSinceLastObservation(0) {
+         Observations.emplace_back(s_block);
+      }
+      
+      std::list<CBlockSensor::SBlock> Observations;
+      unsigned int FramesSinceLastObservation;
+   };
 
+   void AssociateAndTrackTargets(const std::list<CBlockSensor::SBlock>& lst_detected_blocks,
+                                 std::list<STarget>& lst_targets);
 private:
-   bool m_bAnnotateImages;
-   
-   std::string m_strImageSavePath;
-   std::string m_strRemoteHost;
 
-   CPacketControlInterface* m_pcPowerManagementInterface;
-   CPacketControlInterface* m_pcSensorActuatorInterface;
-   CPacketControlInterface* m_pcManipulatorInterface;
+   struct SAssociatedTarget {
+      SAssociatedTarget(const STarget* ps_target) :
+         Target(ps_target) {}
+      
+      const STarget* Target;
+      std::list<CBlockSensor::SBlock>::const_iterator CandidateAssociation;
+      float CandidateAssociationDist;
+   };
 
-   CISSCaptureDevice* m_pcISSCaptureDevice;
-   CTCPImageSocket* m_pcTCPImageSocket;
-   CBlockSensor* m_pcBlockSensor;
+   float CalculateMinimumDistanceToFrame(const std::pair<float, float>& c_coordinates);
 
-   const static std::string m_strIntro;
-   const static std::string m_strUsage;
+
+   unsigned int m_unFrameHeight;
+   unsigned int m_unFrameWidth;
+   unsigned int m_unTrackingDepth;
+   float m_fAssociationRecursionRatio;
+   float m_fPixelToDistanceCoefficient;
+
 };
+
+   
 
 #endif
