@@ -26,6 +26,13 @@ public:
       unsigned int length;
       unsigned int offset;
    };
+
+   struct SPixelData {
+      unsigned char U0;
+      unsigned char Y0;
+      unsigned char V0;
+      unsigned char Y1;
+   };
    
 public:
 
@@ -45,33 +52,25 @@ public:
 
    // Opens the device (OV5640 sensor connected to the MIPI CSI2 channel).
    // No parameters are given, as we expect the device to have a fixed device id
-   bool open();
+   bool Open();
 
    // Relase the device. 
    // Free'es the internal frame buffer.
-   bool release();
+   bool Release();
 
    // Returns true if the device already has been opened. 
-   inline bool isOpened() const { return is_opened_; }
+   inline bool IsOpened() const { return is_opened_; }
 
-   // Gets a property from the capture device
-   double get(int propId);
-
+   bool WriteFrameToDisk(std::string s_path_to_file);
+   
    // Grabs a single frame from the image sensor
-   bool grab();
-
-   // Decodes the grabbed video frame and returns it to the given
-   // image structure.
-   bool retrieve(cv::Mat& image);
+   bool Grab();
 
    // Grabs, decodes and returns the grabbed image.
-   bool read(cv::Mat& image);
+   bool GetFrame(cv::Mat& c_y_channel, cv::Mat& c_u_channel, cv::Mat& c_v_channel);
 
-   // Short hand for `read`, to use the capture device liek `cin`.
-   inline CISSCaptureDevice& operator >> (cv::Mat& image) {
-      read(image);
-      return (*this);
-   }
+
+   
 
 private:
    int fd_;
@@ -83,8 +82,8 @@ private:
    OvFrameBuffer buffers_[NumBuffers];
    const OvVideoMode& mode_;
 
-   bool open_internal();
-   bool start_capturing();
+   bool OpenInternal();
+   bool StartCapturing();
 
    const unsigned int m_unScale;
 
