@@ -1,6 +1,9 @@
 
 #include "block_sensor.h"
 
+#include "tag.h"
+#include "block.h"
+
 /****************************************/
 /****************************************/
 
@@ -22,8 +25,8 @@ CBlockSensor::CBlockSensor() {}
 /****************************************/
 
 void CBlockSensor::DetectBlocks(const cv::Mat& c_grayscale_frame,
-                                std::list<CBlockSensor::SBlock>& lst_blocks) {
-   /* Clear the vector of existing blocks */
+                                std::list<SBlock>& lst_blocks) {
+   /* clear the list of existing blocks */
    lst_blocks.clear();
 
    /* GetTags extract tags from frame */
@@ -113,6 +116,8 @@ void CBlockSensor::DetectBlocks(const cv::Mat& c_grayscale_frame,
          lst_blocks.back().Tags = {sTag};
          lst_blocks.back().Coordinates = std::pair<float, float>(vecCentrePixel[0].x,
                                                                  vecCentrePixel[0].y);
+         lst_blocks.back().TranslationMatrix = cCamToBlockTranslation;
+         lst_blocks.back().RotationMatrix = cCamToBlockRotation;  
       }
    }
 }

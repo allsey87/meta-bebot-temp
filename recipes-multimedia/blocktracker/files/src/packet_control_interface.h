@@ -44,6 +44,7 @@ public:
       enum class EType : uint8_t {
          GET_UPTIME = 0x00,
          GET_BATT_LVL = 0x01,
+
          /*************************************/
          /* Sensor-Actuator Microcontroller   */
          /*************************************/
@@ -60,8 +61,10 @@ public:
          /* Power Management Microcontroller  */
          /*************************************/
          /* Switches */
-         SET_SYSTEM_POWER_ENABLE = 0x40,
-         SET_ACTUATOR_POWER_ENABLE = 0x41,
+         SET_ACTUATOR_POWER_ENABLE = 0x40,
+         SET_ACTUATOR_INPUT_LIMIT_OVERRIDE = 0x41,
+         SET_USBIF_ENABLE = 0x42,
+         REQ_SOFT_PWDN = 0x43,
 
          /*************************************/
          /* Manipulator Microcontroller       */

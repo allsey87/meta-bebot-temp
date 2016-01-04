@@ -27,6 +27,18 @@ CPacketControlInterface::CPacket::EType CPacketControlInterface::CPacket::GetTyp
    case 0x14:
       return EType::GET_DDS_PARAMS;
       break;
+   case 0x40:
+      return EType::SET_ACTUATOR_POWER_ENABLE;
+      break;
+   case 0x41:
+      return EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE;
+      break;
+   case 0x42:
+      return EType::SET_USBIF_ENABLE;
+      break;
+   case 0x43:
+      return EType::REQ_SOFT_PWDN;
+      break;
    case 0x60:
       return EType::GET_CHARGER_STATUS;
       break;

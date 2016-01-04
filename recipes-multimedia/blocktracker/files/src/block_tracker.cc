@@ -1,119 +1,157 @@
 
 #include "block_tracker.h"
 
-void CBlockTracker::AssociateAndTrackTargets(const std::list<CBlockSensor::SBlock>& lst_detected_blocks,
+#include <iostream>
+
+void CBlockTracker::AssociateAndTrackTargets(std::list<SBlock>& lst_unassociated_blocks,
                                              std::list<STarget>& lst_targets) {
-
-   /* TODO / TOCHECK */
-   /*
-     1. check the case that multiple targets could be assigned the
-     same block, how should this be handled?
-
-     2. implement block disappearance distance based on distance from
-     frame
-
-     3. check that the variables for closest distance etc are
-     appropiately set when being moved back into the unassociated list
-
-     4. capture sample video from camera as series of images and build
-     test cases for calibrating and testing the algorithm
-
-     5. note, when doing velocity based matching, it is possible for
-     block positions to be predicted outside of the frame, probably
-     breaking the CalculateMinimumDistanceToFrame code
-
-    */
-   
-   
-   /* Create a set of mappings by sequentially assigning pairs based on the best
-      match (smallest distance between a block in frame n - 1 and frame n) */
-   /* Select a random permutation */
-   /* If there is more two existing observations, consider doing a projectile
-      based match */
-
-   std::list<SAssociatedTarget> lstUnassociatedTargets, lstAssociatedTargets;
-
-   /* create a list of unassociated targets to be matched against the detected blocks */
-   for(const STarget& s_target : lst_targets) {
-      lstUnassociatedTargets.emplace_back(&s_target);
-   }
-
-   while(!lstUnassociatedTargets.empty()) {
-      for(std::list<CBlockSensor::SBlock>::const_iterator itDetectedBlock = std::begin(lst_detected_blocks);
-          itDetectedBlock != std::end(lst_detected_blocks);
-          itDetectedBlock++) {
-
-         /* randomize the order of unassociated targets */
-         //std::random_shuffle(std::begin(lstUnassociatedTargets), std::end(lstUnassociatedTargets));
-
-         /* warning: begin is defined, element is not for empty list */
-         std::list<SAssociatedTarget>::iterator itClosestTrackedTarget = std::end(lstUnassociatedTargets);
+   /* list for keeping track of associations between the blocks and the existing targets */
+   std::list<SAssociation> lstAssociations, lstFinalAssociations;
+   /* while we still have unassociated blocks or targets */
+   while(!lst_targets.empty() || !lst_unassociated_blocks.empty()) {
+      /* for each detected block */
+      while(!lst_unassociated_blocks.empty()) {
+         /* Take the first block in the list */
+         std::list<SBlock>::iterator itUnassociatedBlock = std::begin(lst_unassociated_blocks);
+         /* compare the block to each target, keeping track of the target with the
+            minimum distance between itself and the block */
+         std::list<STarget>::iterator itClosestTrackedTarget = std::end(lst_targets);
          float fClosestTrackedTargetDist = 0;
-         
-         for(std::list<SAssociatedTarget>::iterator itTrackedTarget = std::begin(lstUnassociatedTargets);
-             itTrackedTarget != std::end(lstUnassociatedTargets);
+         /* select the closest target to the block */
+         for(std::list<STarget>::iterator itTrackedTarget = std::begin(lst_targets);
+             itTrackedTarget != std::end(lst_targets);
              itTrackedTarget++) {
-
-            /* TODO: handle case where Observations[0] does not exist */
-            /* where there are two observations, use velocity matching approach */
-            const CBlockSensor::SBlock& sTrackedBlock = itTrackedTarget->Target->Observations.front();
+            /* TODO: where there are two observations, use velocity matching approach */
+            std::list<SBlock>::iterator itTrackedBlock = std::begin(itTrackedTarget->Observations);
             /* calculate the distance between this block and the tracked block */
-            float fInterblockDist = sqrt(pow(sTrackedBlock.X - itDetectedBlock->X, 2) +
-                                         pow(sTrackedBlock.Y - itDetectedBlock->Y, 2) +
-                                         pow(sTrackedBlock.Z - itDetectedBlock->Z, 2));
-            if(itClosestTrackedTarget == std::end(lstUnassociatedTargets) ||
+            float fInterblockDist =
+               sqrt(pow(itTrackedBlock->X - itUnassociatedBlock->X, 2) +
+                    pow(itTrackedBlock->Y - itUnassociatedBlock->Y, 2) +
+                    pow(itTrackedBlock->Z - itUnassociatedBlock->Z, 2));
+            if(itClosestTrackedTarget == std::end(lst_targets) ||
                fInterblockDist < fClosestTrackedTargetDist) {
                itClosestTrackedTarget = itTrackedTarget;
                fClosestTrackedTargetDist = fInterblockDist;
             }
          }
-         /* consider the case of a new block appearing */
-         float fMinDistToFrame = CalculateMinimumDistanceToFrame(itDetectedBlock->Coordinates);
+         /* consider the case of a new block appearing (i.e. a new target) */
+         float fMinDistToFrame = CalculateMinimumDistanceToFrame(itUnassociatedBlock->Coordinates);
          float fNewTrackedTargetDist = m_fPixelToDistanceCoefficient / (fMinDistToFrame + 1);
-
-         if(fNewTrackedTargetDist < fClosestTrackedTargetDist) {
-            //lst_targets.emplace_back(*itDetectedBlock);
-            //lstAssociatedTargets.emplace_back(&lst_targets.back(), itDetectedBlock, fNewTrackedTargetDist);
+         if(itClosestTrackedTarget == std::end(lst_targets) ||
+            fNewTrackedTargetDist < fClosestTrackedTargetDist) {
+            /* create a new association with */
+            lstAssociations.emplace_back(fNewTrackedTargetDist);
+            /* reference the list for the candidate block */
+            std::list<SBlock>& lstCandidateBlock = lstAssociations.back().CandidateBlock;
+            /* move the block into this list */
+            lstCandidateBlock.splice(std::begin(lstCandidateBlock),
+                                     lst_unassociated_blocks,
+                                     itUnassociatedBlock);
          }
          else {
-            /* Move the closest match from the unassociated list to the associated list */
-            //lstAssociatedTargets.splice(std::begin(lstAssociatedTargets),
-            //                            lstUnassociatedTargets,
-            //                            itClosestTrackedTarget);
+            /* set the association distance for the closest tracked target */
+            lstAssociations.emplace_back(fClosestTrackedTargetDist);
+            /* reference the list for the candidate block and existing target */
+            std::list<STarget>& lstExistingTarget = lstAssociations.back().ExistingTarget;
+            std::list<SBlock>& lstCandidateBlock = lstAssociations.back().CandidateBlock;
+            /* move the existing target and block into the association */
+            lstExistingTarget.splice(std::begin(lstExistingTarget),
+                                     lst_targets,
+                                     itClosestTrackedTarget);
+            lstCandidateBlock.splice(std::begin(lstCandidateBlock),
+                                     lst_unassociated_blocks,
+                                     itUnassociatedBlock);
          }
-      } // end loop over each detected block
-      
-      /* For each target that doesn't have a matching block, we assume we have temporarily 
-         lost tracking and add the effective distance based on the position in the frame*/
-      for(SAssociatedTarget& s_unassociated_target : lstUnassociatedTargets) {
-         float fMinDistToFrame = CalculateMinimumDistanceToFrame(s_unassociated_target.Target->Observations.front().Coordinates);
-         s_unassociated_target.CandidateAssociationDist = m_fPixelToDistanceCoefficient /
-            (fMinDistToFrame + 1);
+      } /* while(!lst_unassociated_blocks.empty()) */
+      /* For each target that doesn't have an associated block */
+      while(!lst_targets.empty()) {
+         std::list<STarget>::iterator itLostTarget = std::begin(lst_targets);
+         /* compute an effective tracking distance based on the distance to the frame */
+         float fMinDistToFrame =
+            CalculateMinimumDistanceToFrame(std::begin(itLostTarget->Observations)->Coordinates);
+         lstAssociations.emplace_back(m_fPixelToDistanceCoefficient / (fMinDistToFrame + 1));
+         /* reference the list for the existing target */
+         std::list<STarget>& lstExistingTarget = lstAssociations.back().ExistingTarget;
+         /* move the existing target into the association */
+         lstExistingTarget.splice(std::begin(lstExistingTarget),
+                                  lst_targets,
+                                  itLostTarget);
       }
-
-      /* move the unassociated targets that we assume we have lost to the associated list */
-      lstAssociatedTargets.splice(std::begin(lstAssociatedTargets),
-                                  lstUnassociatedTargets);
-
-      /* sort the list of associated targets by distance */
-      lstAssociatedTargets.sort([] (const SAssociatedTarget& s_associated_target_first,
-                                    const SAssociatedTarget& s_associated_target_second) {
-                                   return (s_associated_target_first.CandidateAssociationDist >
-                                           s_associated_target_second.CandidateAssociationDist);
-                                });
-
-      /* Move the X worst associations back into the unassociated targets list and continue */
-      std::list<SAssociatedTarget>::iterator itReassociationRangeEnd = std::begin(lstAssociatedTargets);
-      std::advance(itReassociationRangeEnd, lstAssociatedTargets.size() * m_fAssociationRecursionRatio);
-      
-      lstUnassociatedTargets.splice(std::begin(lstUnassociatedTargets),
-                                    lstAssociatedTargets,
-                                    std::begin(lstAssociatedTargets),
-                                    itReassociationRangeEnd);
+      /* sort the list of associations by distance */
+      lstAssociations.sort([] (const SAssociation& s_association_first,
+                               const SAssociation& s_association_second) {
+                              return (s_association_first.AssociationDist <
+                                      s_association_second.AssociationDist);
+                           });
+      /* determine the range of the X best associations */
+      std::list<SAssociation>::iterator itFinalAssociationRangeEnd = std::begin(lstAssociations);
+      std::advance(itFinalAssociationRangeEnd,
+                   std::ceil(lstAssociations.size() * (1 - m_fAssociationRecursionRatio)));
+      /* move the X best associations into the final associations list */
+      lstFinalAssociations.splice(std::begin(lstFinalAssociations),
+                                  lstAssociations,
+                                  std::begin(lstAssociations),
+                                  itFinalAssociationRangeEnd);
+      /* undo the remaining associations */
+      for(SAssociation& s_association : lstAssociations) {
+         if(!s_association.ExistingTarget.empty()) {
+            lst_targets.splice(lst_targets.begin(), s_association.ExistingTarget);
+         }
+         if(!s_association.CandidateBlock.empty()) {
+            lst_unassociated_blocks.splice(lst_unassociated_blocks.begin(), s_association.CandidateBlock);
+         }
+      }
+      lstAssociations.clear();
+   } /* while(!lst_targets.empty() || !lst_unassociated_blocks.empty()) */
+   /* move the final associations back into the target list */
+   for(SAssociation& s_association : lstFinalAssociations) {
+      /* if association doesn't have a target, create one */
+      if(s_association.ExistingTarget.empty()) {
+         s_association.ExistingTarget.emplace_back();
+      }
+      /* if a candidate block exists, move it into the target observations list */
+      if(!s_association.CandidateBlock.empty()) {
+         std::begin(s_association.ExistingTarget)->FramesSinceLastObservation = 0;
+         std::list<SBlock>& lstObservations = std::begin(s_association.ExistingTarget)->Observations;
+         lstObservations.splice(std::begin(lstObservations), s_association.CandidateBlock);
+         /* limit the number of observations to m_unTrackingDepth */
+         while(lstObservations.size() > m_unTrackingDepth) {
+            lstObservations.pop_back();
+         }
+      }
+      else {
+         std::begin(s_association.ExistingTarget)->FramesSinceLastObservation++;   
+      }
+      /* if we haven't exceeded m_unLostTargetThreshold, move the target back into the targets list */
+      if(std::begin(s_association.ExistingTarget)->FramesSinceLastObservation < m_unLostTargetThreshold) {
+         lst_targets.splice(std::begin(lst_targets), s_association.ExistingTarget);
+      }
    }
-   /* clean out targets that haven't had an observation for X frames */
-   /* check all targets have an unique id in the list */
+   AssignIdentifiers(lst_targets);
 }
+
+void CBlockTracker::AssignIdentifiers(std::list<STarget>& lst_targets) {
+   /* create a list of the used target indentifiers */
+   std::list<unsigned int> lstUsedIds;
+   unsigned int unNextId = 0;
+   /* populate that list */
+   for(STarget& s_target : lst_targets) {
+      if(s_target.Id != -1) {
+         lstUsedIds.push_back(s_target.Id);
+      }
+   }
+   /* assign identifiers */
+   for(STarget& s_target : lst_targets) {
+      if(s_target.Id == -1) {
+         while(std::find(std::begin(lstUsedIds), std::end(lstUsedIds), unNextId) != std::end(lstUsedIds)) {
+            unNextId++;
+         }
+         s_target.Id = unNextId;
+         lstUsedIds.push_back(unNextId);
+      }
+   }
+}
+
 
 float CBlockTracker::CalculateMinimumDistanceToFrame(const std::pair<float, float>& c_coordinates) {
    /* init fMinDistToFrame as float max */

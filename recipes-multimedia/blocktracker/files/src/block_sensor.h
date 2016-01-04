@@ -5,33 +5,23 @@
 #include <apriltags/Tag36h11.h>
 #include <opencv2/core/core.hpp>
 
+#include "block.h"
+
 class CBlockSensor {
-public:
-
-   struct STag {
-      std::vector<std::pair<float, float>> Corners;
-      std::pair<float, float> Center;
-      cv::Mat RotationVector;
-      cv::Mat TranslationVector;
-   };
-
-   struct SBlock {
-      /* constructor */
-      SBlock(float f_x, float f_y, float f_z, float f_yaw, float f_pitch, float f_roll) :
-         X(f_x), Y(f_y), Z(f_z), Yaw(f_yaw), Pitch(f_pitch), Roll(f_roll) {}
-      /* Set of tags used to identify the block */
-      std::vector<STag> Tags;
-      /* Block 2D coordinates in frame */
-      std::pair<float, float> Coordinates;
-      /* Block 3D coordinates and orientation */
-      float X, Y, Z, Yaw, Pitch, Roll;
-   };
    
 public:
 
    CBlockSensor();
 
    void DetectBlocks(const cv::Mat& c_grayscale_frame, std::list<SBlock>& lst_blocks);
+
+   const cv::Matx33f& GetCameraMatrix() {
+      return m_cCameraMatrix;
+   }
+
+   const cv::Vec4f& GetDistortionParameters() {
+      return m_cDistortionParameters;
+   }
 
 private:
 
