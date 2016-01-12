@@ -21,8 +21,9 @@ add_executable(blocktracker
                src/block_sensor.cc
                src/block_tracker.cc
                src/frame_annotator.cc
-				   src/tcp_image_socket.cc
+               src/state.cc
 				   src/packet_control_interface.cc
+ 				   src/tcp_image_socket.cc
 				   src/uart_socket.cc)
 
 set_property(TARGET blocktracker PROPERTY CXX_STANDARD 11)

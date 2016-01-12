@@ -142,9 +142,22 @@ public:
 
    void Reset();
 
+   /* Send multi-byte packet */
    void SendPacket(CPacket::EType e_type,
-                   const uint8_t* pun_tx_data = nullptr,
-                   uint8_t un_tx_data_length = 0);
+                   const uint8_t* pun_tx_data,
+                   uint8_t un_tx_data_length);
+
+   /* Send single-byte packet */
+   void SendPacket(CPacket::EType e_type,
+                   uint8_t un_tx_data) {
+      SendPacket(e_type, &un_tx_data, 1);
+   }
+
+   /* Send packet without data */
+   void SendPacket(CPacket::EType e_type) {
+      SendPacket(e_type, nullptr, 0);
+   }
+
       
 private:
    uint8_t ComputeChecksum(uint8_t* pun_buf_data, uint8_t un_buf_length);
