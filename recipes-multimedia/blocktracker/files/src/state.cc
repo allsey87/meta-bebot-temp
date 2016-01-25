@@ -13,6 +13,9 @@ CState::CState(const std::string& str_id,
    m_itCurrentSubState = std::end(m_vecSubStates);  
 }
 
+/***********************************************************/
+/***********************************************************/
+
 CState::CState(const CState& c_state_other) :
    m_strId(c_state_other.m_strId),
    m_fnEntryMethod(c_state_other.m_fnEntryMethod),
@@ -45,6 +48,9 @@ CState::CState(const CState& c_state_other) :
    }
 }
 
+/***********************************************************/
+/***********************************************************/
+
 CState& CState::operator[](const std::string& str_id) {
    std::vector<CState>::iterator itSubState = 
       std::find_if(std::begin(m_vecSubStates), std::end(m_vecSubStates), [&str_id] (const CState& c_state) {
@@ -56,14 +62,23 @@ CState& CState::operator[](const std::string& str_id) {
    }
    return *itSubState;
 }
+
+/***********************************************************/
+/***********************************************************/
      
 void CState::SetEntryFunction(std::function<void()> fn_entry_method) {
    m_fnEntryMethod = fn_entry_method;
 }
 
+/***********************************************************/
+/***********************************************************/
+
 void CState::SetExitFunction(std::function<void()> fn_exit_method) {
    m_fnExitMethod = fn_exit_method;
 }
+
+/***********************************************************/
+/***********************************************************/
 
 void CState::AddTransition(std::string str_from_state,
                            std::string str_to_state,
@@ -93,6 +108,9 @@ void CState::AddTransition(std::string str_from_state,
 
 }
 
+/***********************************************************/
+/***********************************************************/
+
 void CState::AddExitTransition(std::string str_from_state,
                                std::function<bool()> fn_guard) {
                    
@@ -109,6 +127,8 @@ void CState::AddExitTransition(std::string str_from_state,
    }
 }
 
+/***********************************************************/
+/***********************************************************/
 
 bool CState::Step() { 
    /* Run entry procedure if defined and set initial sub-state */
@@ -145,6 +165,21 @@ bool CState::Step() {
    }
 }
 
+/***********************************************************/
+/***********************************************************/
+
+std::ostream& operator<<(std::ostream& c_stream, const CState& c_state) {
+   c_stream << c_state.m_strId;
+   if(c_state.m_itCurrentSubState != std::end(c_state.m_vecSubStates)) {
+      c_stream << "." << *c_state.m_itCurrentSubState;
+   }
+   return c_stream;
+}
+
+/***********************************************************/
+/***********************************************************/
+
+/*
 std::ostream& operator<<(std::ostream& c_stream, const CState& c_state) {
    c_stream << c_state.m_strId 
           << (c_state.m_itCurrentSubState != std::end(c_state.m_vecSubStates) ? "*" : "")
@@ -160,5 +195,5 @@ std::ostream& operator<<(std::ostream& c_stream, const CState& c_state) {
    c_stream << "}";
    return c_stream;
 }
-
+*/
    

@@ -64,15 +64,23 @@ public:
          SET_ACTUATOR_POWER_ENABLE = 0x40,
          SET_ACTUATOR_INPUT_LIMIT_OVERRIDE = 0x41,
          SET_USBIF_ENABLE = 0x42,
+         /* Other */
          REQ_SOFT_PWDN = 0x43,
-
+         GET_PM_STATUS = 0x44,
+         GET_USB_STATUS = 0x45,
+         
          /*************************************/
          /* Manipulator Microcontroller       */
          /*************************************/
          GET_CHARGER_STATUS = 0x60,
          /* Lift Actuator System */
-         SET_LIFT_ACTUATOR_SPEED = 0x71,
-         GET_LIMIT_SWITCH_STATE = 0x72,
+         SET_LIFT_ACTUATOR_POSITION = 0x70,
+         GET_LIFT_ACTUATOR_POSITION = 0x71,
+         SET_LIFT_ACTUATOR_SPEED = 0x72,
+         GET_LIMIT_SWITCH_STATE = 0x73,
+         CALIBRATE_LIFT_ACTUATOR = 0x74,
+         EMER_STOP_LIFT_ACTUATOR = 0x75,
+         GET_LIFT_ACTUATOR_STATE = 0x76,
          /* Electromagnet Subsystem */
          SET_EM_CHARGE_ENABLE = 0x80,
          SET_EM_DISCHARGE_MODE = 0x81,

@@ -22,8 +22,10 @@
 #include "block_tracker.h"
 #include "block_sensor.h"
 #include "frame_annotator.h"
+#include "leds.h"
 #include "packet_control_interface.h"
 #include "tcp_image_socket.h"
+
 
 #include "manipulator_testing_task.h"
 
@@ -235,6 +237,11 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
       return -ENODEV;
    }
    std::cerr << "OK" << std::endl;
+   
+   /* Link to the LEDs */
+   for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_LEDS; un_dev_idx++) {
+      m_vecLEDs.emplace_back("/sys/class/leds/", "pca963x:led_deck", un_dev_idx);
+   }
 
    /* Create the block sensor/tracker instances */
    m_pcBlockSensor = new CBlockSensor;
@@ -283,16 +290,53 @@ void CBlockDemo::Exec() {
                                            reinterpret_cast<const uint8_t*>(pnDriveSystemStop),
                                            2);
 
+
+   std::cerr << "Charging the electromagnet capacitors: ";
    /* Disable electromagnet discharge */
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
-
-   
    /* Enable charging for the electromagnetic capacitors */
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);
    
+   /* Allow the electromagnet capacitors to charge to 50% so that we don't brown out the remote power supply */
+   while(!bShutdownSignal) {        
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
+      if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
+         const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
+         if(cPacket.GetType() == CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE &&
+            cPacket.GetDataLength() == 1) {
+            const uint8_t* punPacketData = cPacket.GetDataPointer();
+            if(punPacketData[0] > 0x80) {
+               std::cerr << "OK" << std::endl;
+               break;
+            }
+         }
+      }
+      sleep(1);
+   }
+   
+   /* Start calibration of the lift actuator */
+   std::cerr << "Calibrating the lift actuator: ";
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::CALIBRATE_LIFT_ACTUATOR);
+
+   while(!bShutdownSignal) {
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+      if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
+         const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
+         if(cPacket.GetType() == CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE &&
+            cPacket.GetDataLength() == 1) {
+            const uint8_t* punPacketData = cPacket.GetDataPointer();
+            if(punPacketData[0] == static_cast<uint8_t>(ELiftActuatorSystemState::INACTIVE)) {
+               std::cerr << "OK" << std::endl;
+               break;
+            }
+         }
+      }
+      sleep(1);
+   }
+   
    /* grab a couple frames to allow the sensor to adjust to the lighting conditions */
-   for(unsigned int unNumberFrames = 3; unNumberFrames > 0; unNumberFrames--) {
+   for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
       m_pcISSCaptureDevice->Grab();
    }
 
@@ -301,95 +345,123 @@ void CBlockDemo::Exec() {
       
       /******** SAMPLE SENSORS ********/
       /* send requests to sample sensors on the manipulator microcontroller */
-      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIMIT_SWITCH_STATE);
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
 
-      /* capture a frame  from the camera interface */
-      m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
-                                     m_psSensorData->ImageSensor.U,
-                                     m_psSensorData->ImageSensor.V);
+      if(m_psSensorData->ImageSensor.Enable) {
+         /* capture a frame  from the camera interface */
+         m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
+                                        m_psSensorData->ImageSensor.U,
+                                        m_psSensorData->ImageSensor.V);                                     
+      }
 
       /* wait for responses from the manipulator interface */
       bool bWaitingForRfResponse = true;
-      bool bWaitingForSwitchResponse = true;
+      bool bWaitingForLiftActuatorPositionResponse = true;
+      bool bWaitingForLiftActuatorStateResponse = true;
+      
       do {
          m_pcManipulatorInterface->ProcessInput();
          if(m_pcManipulatorInterface->GetState() == CPacketControlInterface::EState::RECV_COMMAND) {
             const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
             switch(cPacket.GetType()) {
-            case CPacketControlInterface::CPacket::EType::GET_LIMIT_SWITCH_STATE:
-               if(cPacket.GetDataLength() == 2) {
+            case CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE:
+               if(cPacket.GetDataLength() == 1) {
                   const uint8_t* punPacketData = cPacket.GetDataPointer();
-                  m_psSensorData->ManipulatorModule.LimitSwitches.Bottom = (punPacketData[0] != 0);
-                  m_psSensorData->ManipulatorModule.LimitSwitches.Top = (punPacketData[1] != 0);		
-                  bWaitingForSwitchResponse = false;
+                  switch(punPacketData[0]) {
+                  case 0:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::INACTIVE;
+                     break;
+                  case 1:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::ACTIVE;
+                     break;
+                  case 2:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::CAL_SRCH_BTM;
+                     break;
+                  case 3:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::CAL_SRCH_TOP;
+                     break;
+                  }
+                  bWaitingForLiftActuatorStateResponse = false;
                }
                break;
             case CPacketControlInterface::CPacket::EType::GET_RF_RANGE:
-               if(cPacket.GetDataLength() == 8) {
+               if(cPacket.GetDataLength() == 10) {
                   const uint8_t* punPacketData = cPacket.GetDataPointer();
-                  m_psSensorData->ManipulatorModule.RangeFinders.Left =
+                  m_psSensorData->ManipulatorModule.RangeFinders.EndEffector =
                      (punPacketData[0] << 8) | punPacketData[1];
-                  m_psSensorData->ManipulatorModule.RangeFinders.Right =
+                  m_psSensorData->ManipulatorModule.RangeFinders.Left =
                      (punPacketData[2] << 8) | punPacketData[3];
-                  m_psSensorData->ManipulatorModule.RangeFinders.Front =
+                  m_psSensorData->ManipulatorModule.RangeFinders.Right =
                      (punPacketData[4] << 8) | punPacketData[5];
-                  m_psSensorData->ManipulatorModule.RangeFinders.Underneath =
+                  m_psSensorData->ManipulatorModule.RangeFinders.Front =
                      (punPacketData[6] << 8) | punPacketData[7];
+                  m_psSensorData->ManipulatorModule.RangeFinders.Underneath =
+                     (punPacketData[8] << 8) | punPacketData[9];
                   bWaitingForRfResponse = false;
+               }
+               break;
+            case CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION:
+               if(cPacket.GetDataLength() == 1) {
+                  const uint8_t* punPacketData = cPacket.GetDataPointer();
+                  m_psSensorData->ManipulatorModule.LiftActuator.EndEffector.Position =
+                     punPacketData[0];
+                  bWaitingForLiftActuatorPositionResponse = false;
                }
                break;
             default:
                continue;
             }
          }
-      } while((bWaitingForRfResponse || bWaitingForSwitchResponse) && !bShutdownSignal);
+      } while((bWaitingForRfResponse || 
+               bWaitingForLiftActuatorStateResponse || 
+               bWaitingForLiftActuatorPositionResponse) && !bShutdownSignal);
       
       /* Store the system time and the control tick counter */
       m_psSensorData->Clock.Time = GetTime();
       m_psSensorData->Clock.Ticks = unControlTick;
 
       if(m_bVerboseOutput) {
-         std::cerr << "[Sensors]" << std::endl;
-         std::cerr << "S(T) = "
-                   << (m_psSensorData->ManipulatorModule.LimitSwitches.Top ? '1' : '0') << ", "
+         std::cerr << "[Sensors] "
+                   << "S(T) = "
+                   << (m_psSensorData->ManipulatorModule.LiftActuator.LimitSwitches.Top ? '1' : '0') << ", "
                    << "S(B) = "
-                   << (m_psSensorData->ManipulatorModule.LimitSwitches.Bottom ? '1' : '0') << ", "
+                   << (m_psSensorData->ManipulatorModule.LiftActuator.LimitSwitches.Bottom ? '1' : '0') << ", "
+                   << "R(E) = "
+                   << m_psSensorData->ManipulatorModule.RangeFinders.EndEffector << ", "
                    << "R(L) = "
                    << m_psSensorData->ManipulatorModule.RangeFinders.Left << ", "
                    << "R(R) = "
                    << m_psSensorData->ManipulatorModule.RangeFinders.Right << ", "
                    << "R(F) = "
                    << m_psSensorData->ManipulatorModule.RangeFinders.Front << ", "
-                   << "R(U) = " << m_psSensorData->ManipulatorModule.RangeFinders.Underneath << std::endl;
+                   << "R(U) = "
+                   << m_psSensorData->ManipulatorModule.RangeFinders.Underneath << std::endl;
       }
-           
-      /******** DO IMAGE PROCESSING ********/
-      //m_pcBlockSensor->SetCameraPosition();  
-      m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y, lstDetectedBlocks);
+      
+      /******** DO IMAGE PROCESSING ********/   
+      if(m_psSensorData->ImageSensor.Enable) {
+         //m_pcBlockSensor->SetCameraPosition();  
+         m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y, lstDetectedBlocks);
 
-      // TODO pass the time in miliseconds to track targets to allow for protectile based matching        
-      m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, lstTrackedTargets);
-
-
-      /*
-      // Cluster targets into structures
-      CStructureDetectionAlgorithm::GenerateStructures();
-      for(const CMicroRule& c_rule : vecMicroRules) {
-         if(c_rule.Matches(set_of_detected_structures)) {
-            m_pcActiveRule = &c_rule;
-            break;
-         }
+         // TODO pass the time in miliseconds to track targets to allow for protectile based matching        
+         m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, lstTrackedTargets);                          
       }
-      */
-
+      
       /******** STEP THE TASK ********/
       bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
-      std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
 
+      /* Output the current state of the state machine */
+      std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
+       
       /******** UPDATE ACTUATORS ********/
       /* Differential Drive System */
-      if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq ||
+      if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq || 
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq) {
          /* Data for transfer */
          int8_t pnSpeeds[] = {
@@ -400,23 +472,64 @@ void CBlockDemo::Exec() {
          m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
                                                  reinterpret_cast<const uint8_t*>(pnSpeeds),
                                                  sizeof(pnSpeeds));
-         /* clear the update requests */
+         /* clear the update request */
          m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = false;
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = false;
       }
+      
+      if(m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq) {
+            m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_ENABLE, 
+                                                    m_psActuatorData->DifferentialDriveSystem.Power.Enable);
+         m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = false;
+      }
+
+      /* LED Deck */
+      for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_LEDS; unLEDIdx++) {
+         if(m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx]) {
+            switch(m_psActuatorData->LEDDeck.Color[unLEDIdx]) {
+            case EColor::RED:
+               m_vecLEDs.at(unLEDIdx).SetRed(0x40);
+               m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
+               break;
+            case EColor::GREEN:
+               m_vecLEDs.at(unLEDIdx).SetRed(0x00);
+               m_vecLEDs.at(unLEDIdx).SetGreen(0x40);
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
+               break;
+            case EColor::BLUE:
+               m_vecLEDs.at(unLEDIdx).SetRed(0x00);
+               m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x40);               
+               break;
+            }
+            m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx] = false;
+         }     
+      }
 
       /* Lift Actuator */
-      if(m_psActuatorData->ManipulatorModule.LiftActuator.UpdateReq) {
+      if(m_psActuatorData->ManipulatorModule.LiftActuator.Velocity.UpdateReq) {
          /* Data for transfer */
          int8_t pnSpeed[] = {
-            m_psActuatorData->ManipulatorModule.LiftActuator.Velocity,
+            m_psActuatorData->ManipulatorModule.LiftActuator.Velocity.Value,
          };
-         /* Send data in a packet to the sensor/actuator interface */
+         /* Send data in a packet to the manipulator interface */
          m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_LIFT_ACTUATOR_SPEED,
                                               reinterpret_cast<const uint8_t*>(pnSpeed),
                                               sizeof(pnSpeed));
          /* clear the update requests */
-         m_psActuatorData->ManipulatorModule.LiftActuator.UpdateReq = false;
+         m_psActuatorData->ManipulatorModule.LiftActuator.Velocity.UpdateReq = false;
+      }
+      if(m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq) {
+         /* Data for transfer */
+         uint8_t pnPosition[] = {
+            m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value,
+         };
+         /* Send data in a packet to the manipulator interface */
+         m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_LIFT_ACTUATOR_POSITION,
+                                              pnPosition, sizeof(pnPosition));
+         /* clear the update requests */
+         m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = false;
       }
 
       /* NFC Interface */
@@ -432,46 +545,25 @@ void CBlockDemo::Exec() {
       }
 
       /* Gripper */
-      if(m_psActuatorData->ManipulatorModule.Gripper.UpdateReq) {
+      if(m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq) {
          /* Data for transfer */
-         const EGripperFieldMode& eGripperFieldMode = m_psActuatorData->ManipulatorModule.Gripper.FieldMode;
+         const EGripperFieldMode& eGripperFieldMode = m_psActuatorData->ManipulatorModule.EndEffector.FieldMode;
          /* Send data in a packet to the sensor/actuator interface */
          m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                               reinterpret_cast<const uint8_t*>(&eGripperFieldMode),
                                               1);
          /* clear the update requests */
-         m_psActuatorData->ManipulatorModule.Gripper.UpdateReq = false;
+         m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq = false;
       }
       
-      
-/*
       if(!lstTrackedTargets.empty()) {        
          const std::list<SBlock>& lstObservations = std::begin(lstTrackedTargets)->Observations;
          const SBlock& sBlock = *std::begin(lstObservations);
-         float fDist = std::sqrt(std::pow(sBlock.X, 2) +
-                                 std::pow(sBlock.Y, 2) +
-                                 std::pow(sBlock.Z, 2));
-         fDist = (fDist > 1.0f) ? 1.0f : (fDist < 0.0f) ? 0.0f : fDist;        
-         std::cout << "[Target] " << fDist << "m" << std::endl;
-         float fTargetSpeed = std::round((fDist - 0.3) * 120);
-         int8_t pnSpeeds[] = {
-            static_cast<int8_t>(fTargetSpeed),
-            static_cast<int8_t>(fTargetSpeed)
-         };
-         std::cout << "[DDS] Speed (" << static_cast<double>(pnSpeeds[0]) << ", "
-                                      << static_cast<double>(pnSpeeds[0]) << ")"
-                                      << std::endl;
-         m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
-                                                 reinterpret_cast<const uint8_t*>(pnSpeeds),
-                                                 2);
+
+         //std::cerr << "[Coords]" << "{" << sBlock.X << ", " << sBlock.Y << ", " << sBlock.Z << "}" << std::endl;
+         //std::cerr << "[Angles]" << "{" << sBlock.Yaw << ", " << sBlock.Pitch << ", " << sBlock.Roll << "}" << std::endl;
       }
-      else {
-         m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
-                                                 reinterpret_cast<const uint8_t*>(pnDriveSystemStop),
-                                                 2);
-      }
-*/     
-      
+     
       /* Annotate the frame if requested */
       if(m_bAnnotateImages) {
          for(const STarget& s_target : lstTrackedTargets) {
@@ -497,7 +589,7 @@ void CBlockDemo::Exec() {
       }
       
       /* stream frame to host if connected */
-      if(m_pcTCPImageSocket != nullptr) {
+      if(m_pcTCPImageSocket != nullptr && m_psSensorData->ImageSensor.Enable) {
          *m_pcTCPImageSocket << m_psSensorData->ImageSensor.Y;
       }
 
@@ -508,34 +600,33 @@ void CBlockDemo::Exec() {
       }
    }
 
+   /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */
-   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_LIFT_ACTUATOR_SPEED, 0);
-
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::EMER_STOP_LIFT_ACTUATOR);
    /* Disable electromagnet discharge */
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
-
    /* Disable electromagnet charging */
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, false);
-
    /* Disable the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
                                            reinterpret_cast<const uint8_t*>(pnDriveSystemStop),
                                            2);
-
    /* Power down the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_ENABLE, false);
 
    /* Switch off LEDs */
+   for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_LEDS; unLEDIdx++) {    
+      m_vecLEDs.at(unLEDIdx).SetRed(0x00);
+      m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
+      m_vecLEDs.at(unLEDIdx).SetBlue(0x00);
+   }
    
-
    /* Disable the actuator power domain */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_POWER_ENABLE, false);
-
    /* Disable actuator input limit override */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
                                             static_cast<const uint8_t>(EActuatorInputLimit::LAUTO));
-
    /* Power down range finder LEDs */
    
    std::cerr << "Shutdown: terminating now" << std::endl;

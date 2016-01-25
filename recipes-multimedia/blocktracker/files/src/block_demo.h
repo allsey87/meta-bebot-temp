@@ -3,12 +3,15 @@
 
 #include <string>
 
+#define NUM_LEDS 12
+
 class CPacketControlInterface;
 class CTCPImageSocket;
 class CBlockSensor;
 class CBlockTracker;
 class CISSCaptureDevice;
 class CManipulatorTestingTask;
+class CLED;
 
 class CBlockDemo {
 public:
@@ -41,22 +44,44 @@ public:
       CONSTRUCTIVE = 0,
       DESTRUCTIVE = 1,
       DISABLED = 2
-   } DischargeMode;
+   };
+   
+   enum class ELiftActuatorSystemState : uint8_t {
+      /* Inactive means the stepper motor is disabled */
+      INACTIVE = 0,
+      /* Active means the stepper motor is running */
+      ACTIVE = 1,
+      /* Calibration search bottom/top */
+      CAL_SRCH_BTM = 2,
+      CAL_SRCH_TOP = 3,
+   };
+   
+   enum class EColor {
+      RED, GREEN, BLUE
+   };
    
    struct SSensorData {
       struct {
          cv::Mat Y, U, V;
+         bool Enable = false;
       } ImageSensor;
       struct {
          struct {
-            uint16_t Left = 0, Right = 0, Front = 0, Underneath = 0;
+            uint16_t EndEffector = 0, Left = 0, Right = 0,
+               Front = 0, Underneath = 0;
          } RangeFinders;
          struct {
-            bool Top = false, Bottom = false;
-         } LimitSwitches;
-         struct {
-            uint8_t StoredCharge = 0;
-         } Gripper;
+            struct {
+               bool Top = false, Bottom = false;
+            } LimitSwitches;
+            struct {
+               uint8_t Charge = 0;
+            } Electromagnets;
+            struct {
+               uint8_t Position = 0;
+            } EndEffector;
+            ELiftActuatorSystemState State = ELiftActuatorSystemState::INACTIVE;
+         } LiftActuator;
       } ManipulatorModule;
       struct {
          double Time = 0;
@@ -70,11 +95,25 @@ public:
             int8_t Velocity = 0;
             bool UpdateReq = false;
          } Left, Right;
+         struct {
+            bool Enable = false;
+            bool UpdateReq = false;
+         } Power;
       } DifferentialDriveSystem;
       struct {
+         std::array<EColor, 12> Color;
+         std::array<bool, 12> UpdateReq;
+      } LEDDeck;
+      struct {
          struct {
-            int8_t Velocity = 0;
-            bool UpdateReq = false;
+            struct {
+               int8_t Value = 0;
+               bool UpdateReq = false;
+            } Velocity;
+            struct {
+               uint8_t Value = 0;
+               bool UpdateReq = false;
+            } Position;
          } LiftActuator;
          struct {
             std::string OutboundMessage;
@@ -84,7 +123,7 @@ public:
             EGripperFieldMode FieldMode =
                EGripperFieldMode::DISABLED;
             bool UpdateReq = false;
-         } Gripper;
+         } EndEffector;
       } ManipulatorModule;
    };
 
@@ -98,6 +137,8 @@ private:
    CPacketControlInterface* m_pcPowerManagementInterface;
    CPacketControlInterface* m_pcSensorActuatorInterface;
    CPacketControlInterface* m_pcManipulatorInterface;
+   
+   std::vector<CLED> m_vecLEDs;
 
    CISSCaptureDevice* m_pcISSCaptureDevice;
    CTCPImageSocket* m_pcTCPImageSocket;
