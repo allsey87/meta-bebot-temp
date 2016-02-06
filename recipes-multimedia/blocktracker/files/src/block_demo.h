@@ -63,7 +63,7 @@ public:
    struct SSensorData {
       struct {
          cv::Mat Y, U, V;
-         bool Enable = false;
+         bool Enable = true;
       } ImageSensor;
       struct {
          struct {

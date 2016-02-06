@@ -15,6 +15,9 @@ include_directories(${ISSCapture_INCLUDE_DIR})
 find_package(AprilTags REQUIRED)
 include_directories(${AprilTags_INCLUDE_DIR})
 
+# Temporary include_directories for ARGoS 3 headers
+include_directories("./src/argos3")
+
 # Build the application
 add_executable(blocktracker
                src/block_demo.cc
@@ -22,9 +25,13 @@ add_executable(blocktracker
                src/block_tracker.cc
                src/frame_annotator.cc
                src/state.cc
+               src/tag.cc
 				   src/packet_control_interface.cc
  				   src/tcp_image_socket.cc
-				   src/uart_socket.cc)
+				   src/uart_socket.cc
+               src/argos3/core/utility/math/vector3.cpp
+               src/argos3/core/utility/math/angles.cpp
+               src/argos3/core/utility/math/matrix/rotationmatrix3.cpp)
 
 set_property(TARGET blocktracker PROPERTY CXX_STANDARD 11)
 

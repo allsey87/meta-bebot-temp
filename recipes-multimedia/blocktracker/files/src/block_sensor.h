@@ -13,7 +13,10 @@ public:
 
    CBlockSensor();
 
-   void DetectBlocks(const cv::Mat& c_grayscale_frame, std::list<SBlock>& lst_blocks);
+   void DetectBlocks(cv::Mat& c_y_frame,
+                     cv::Mat& c_u_frame,
+                     cv::Mat& c_v_frame,
+                     std::list<SBlock>& lst_blocks);
 
    const cv::Matx33f& GetCameraMatrix() {
       return m_cCameraMatrix;
@@ -25,6 +28,11 @@ public:
 
 private:
 
+   void DetectLeds(STag& s_tag, cv::Mat& c_y_frame, cv::Mat& c_u_frame, cv::Mat& c_v_frame);
+
+   void ClusterDetections(std::list<SBlock>& lst_detections,
+                          std::list<SBlock>& lst_blocks);
+                          
    /* Initialise select the AprilTag tag family and init the detector */
    AprilTags::TagCodes m_cTagCodes = AprilTags::TagCodes(AprilTags::tagCodes36h11);
    AprilTags::TagDetector m_cTagDetector = AprilTags::TagDetector(m_cTagCodes);
@@ -32,6 +40,9 @@ private:
    /* April tag (w.r.t. black frame) and block side length in meters */
    const float m_fTagSize = 0.024;
    const float m_fBlockSideLength = 0.055;
+   const float m_fInterLedLength = 0.040;
+   const unsigned int m_unLedRegionOfInterestLength = 9;
+   const unsigned int m_unLedLuminanceOnThreshold = 64;
    
    /* camera focal length in pixels */
    const float m_fFx = 555.0; 

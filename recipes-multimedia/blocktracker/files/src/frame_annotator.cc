@@ -30,8 +30,8 @@ void CFrameAnnotator::Annotate(cv::Mat& c_frame,
    vecInputTargetPoints.push_back(cv::Point3f(-0.0275,  0.0275, -0.0275));
 
    cv::projectPoints(vecInputTargetPoints,
-                     s_block.RotationMatrix,
-                     s_block.TranslationMatrix,
+                     s_block.RotationVector,
+                     s_block.TranslationVector,
                      c_camera_matrix,
                      c_distortion_parameters,
                      vecOutputImagePoints);

@@ -18,6 +18,8 @@
 #include <opencv2/core/core.hpp>
 #include <iss_capture.h>
 
+#include <argos3/core/utility/math/angles.h>
+
 #include "block_demo.h"
 #include "block_tracker.h"
 #include "block_sensor.h"
@@ -85,7 +87,7 @@ CTCPImageSocket& operator<<(CTCPImageSocket& m_cTCPImageSocket, const cv::Mat& m
 
 const std::string CBlockDemo::m_strIntro =
    "Blocktracker Test Application\n"
-   "2015 University of Paderborn\n"
+   "2016 University of Paderborn\n"
    "Michael Allwright\n";
 
 /****************************************/
@@ -296,9 +298,10 @@ void CBlockDemo::Exec() {
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
    /* Enable charging for the electromagnetic capacitors */
-   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, false);
    
    /* Allow the electromagnet capacitors to charge to 50% so that we don't brown out the remote power supply */
+   /*
    while(!bShutdownSignal) {        
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
       if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
@@ -314,8 +317,10 @@ void CBlockDemo::Exec() {
       }
       sleep(1);
    }
+   */
    
    /* Start calibration of the lift actuator */
+   /*
    std::cerr << "Calibrating the lift actuator: ";
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::CALIBRATE_LIFT_ACTUATOR);
 
@@ -334,6 +339,7 @@ void CBlockDemo::Exec() {
       }
       sleep(1);
    }
+   */
    
    /* grab a couple frames to allow the sensor to adjust to the lighting conditions */
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
@@ -446,15 +452,40 @@ void CBlockDemo::Exec() {
       
       /******** DO IMAGE PROCESSING ********/   
       if(m_psSensorData->ImageSensor.Enable) {
-         //m_pcBlockSensor->SetCameraPosition();  
-         m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y, lstDetectedBlocks);
+         //m_pcBlockSensor->SetCameraPosition();
+         lstDetectedBlocks.clear();  
+         m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y,
+                                       m_psSensorData->ImageSensor.U,
+                                       m_psSensorData->ImageSensor.V,
+                                       lstDetectedBlocks);
 
          // TODO pass the time in miliseconds to track targets to allow for protectile based matching        
-         m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, lstTrackedTargets);                          
+         //m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, lstTrackedTargets);                          
+      }
+      
+      for(unsigned int block_list_idx = 0; block_list_idx < lstDetectedBlocks.size(); block_list_idx++) {
+         std::list<SBlock>::iterator itBlock = std::begin(lstDetectedBlocks);
+         std::advance(itBlock, block_list_idx);
+      
+         std::cerr << "Block (" << block_list_idx << ")" << std::endl
+                   << "Translation (X, Y, Z): "
+                   << itBlock->Translation.X << ", "
+                   << itBlock->Translation.Y << ", "
+                   << itBlock->Translation.Z << std::endl
+                   << "Rotation (Z, Y, X): "
+                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.Z)).GetValue() << ", "
+                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.Y)).GetValue() << ", "
+                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.X)).GetValue() << std::endl
+                   << "Detected LEDs: ";
+                   
+         for(ELedState e_led_state : itBlock->Tags[0].DetectedLeds) {
+            std::cerr << e_led_state << " ";
+         }
+         std::cerr << std::endl;
       }
       
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
+      bool bTaskIsComplete = false; // m_pcManipulatorTestingTask->Step();
 
       /* Output the current state of the state machine */
       std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
@@ -540,7 +571,7 @@ void CBlockDemo::Exec() {
          m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SEND_NFC_MESSAGE,
                                               reinterpret_cast<const uint8_t*>(strData.c_str()),
                                               strData.size());
-         /* clear the update requests */
+         /* clear the update request */
          m_psActuatorData->ManipulatorModule.NFCInterface.UpdateReq = false;
       }
 
@@ -550,19 +581,21 @@ void CBlockDemo::Exec() {
          const EGripperFieldMode& eGripperFieldMode = m_psActuatorData->ManipulatorModule.EndEffector.FieldMode;
          /* Send data in a packet to the sensor/actuator interface */
          m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
-                                              reinterpret_cast<const uint8_t*>(&eGripperFieldMode),
-                                              1);
-         /* clear the update requests */
+                                              static_cast<const uint8_t>(eGripperFieldMode));
+         /* clear the update request */
          m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq = false;
       }
-      
+
+      // DEBUG
       if(!lstTrackedTargets.empty()) {        
          const std::list<SBlock>& lstObservations = std::begin(lstTrackedTargets)->Observations;
          const SBlock& sBlock = *std::begin(lstObservations);
 
          //std::cerr << "[Coords]" << "{" << sBlock.X << ", " << sBlock.Y << ", " << sBlock.Z << "}" << std::endl;
          //std::cerr << "[Angles]" << "{" << sBlock.Yaw << ", " << sBlock.Pitch << ", " << sBlock.Roll << "}" << std::endl;
+         //std::cerr << "---" << std::endl;
       }
+      
      
       /* Annotate the frame if requested */
       if(m_bAnnotateImages) {

@@ -25,9 +25,9 @@ void CBlockTracker::AssociateAndTrackTargets(std::list<SBlock>& lst_unassociated
             std::list<SBlock>::iterator itTrackedBlock = std::begin(itTrackedTarget->Observations);
             /* calculate the distance between this block and the tracked block */
             float fInterblockDist =
-               sqrt(pow(itTrackedBlock->X - itUnassociatedBlock->X, 2) +
-                    pow(itTrackedBlock->Y - itUnassociatedBlock->Y, 2) +
-                    pow(itTrackedBlock->Z - itUnassociatedBlock->Z, 2));
+               sqrt(pow(itTrackedBlock->Translation.X - itUnassociatedBlock->Translation.X, 2) +
+                    pow(itTrackedBlock->Translation.Y - itUnassociatedBlock->Translation.Y, 2) +
+                    pow(itTrackedBlock->Translation.Z - itUnassociatedBlock->Translation.Z, 2));
             if(itClosestTrackedTarget == std::end(lst_targets) ||
                fInterblockDist < fClosestTrackedTargetDist) {
                itClosestTrackedTarget = itTrackedTarget;
