@@ -53,9 +53,9 @@ either expressed or implied, of the FreeBSD Project.
 #define max(A, B) (A < B ? B : A)
 #define min(A, B) (A < B ? A : B)
 
-static inline int dequals(float a, float b)
+static inline int dequals(double a, double b)
 {
-    float thresh = 1e-9;
+    double thresh = 1e-9;
     return (fabs(a-b) < thresh);
 }
 
@@ -69,12 +69,12 @@ static inline float fsq(float v)
     return v*v;
 }
 
-static inline float sq(float v)
+static inline double sq(double v)
 {
     return v*v;
 }
 
-static inline float sgn(float v)
+static inline double sgn(double v)
 {
     return (v>=0) ? 1 : -1;
 }
@@ -103,36 +103,36 @@ static inline int irand(int bound)
 }
 
 /** Map vin to [0, 2*PI) **/
-static inline float mod2pi_positive(float vin)
+static inline double mod2pi_positive(double vin)
 {
     return vin - M_TWOPI * floor(vin / M_TWOPI);
 }
 
 /** Map vin to [-PI, PI) **/
-static inline float mod2pi(float vin)
+static inline double mod2pi(double vin)
 {
     return mod2pi_positive(vin + M_PI) - M_PI;
 }
 
 /** Return vin such that it is within PI degrees of ref **/
-static inline float mod2pi_ref(float ref, float vin)
+static inline double mod2pi_ref(double ref, double vin)
 {
     return ref + mod2pi(vin - ref);
 }
 
 /** Map vin to [0, 360) **/
-static inline float mod360_positive(float vin)
+static inline double mod360_positive(double vin)
 {
     return vin - 360 * floor(vin / 360);
 }
 
 /** Map vin to [-180, 180) **/
-static inline float mod360(float vin)
+static inline double mod360(double vin)
 {
     return mod360_positive(vin + 180) - 180;
 }
 
-static inline int theta_to_int(float theta, int max)
+static inline int theta_to_int(double theta, int max)
 {
     theta = mod2pi_ref(M_PI, theta);
     int v = (int) (theta / M_TWOPI * max);
@@ -170,7 +170,7 @@ static inline int iclamp(int v, int minv, int maxv)
     return imax(minv, imin(v, maxv));
 }
 
-static inline float dclamp(float a, float min, float max)
+static inline double dclamp(double a, double min, double max)
 {
     if (a < min)
         return min;
@@ -190,9 +190,9 @@ static inline int fltcmp (float f1, float f2)
         return  0;
 }
 
-static inline int dblcmp (float d1, float d2)
+static inline int dblcmp (double d1, double d2)
 {
-    float epsilon = d1-d2;
+    double epsilon = d1-d2;
     if (epsilon < 0.0)
         return -1;
     else if (epsilon > 0.0)

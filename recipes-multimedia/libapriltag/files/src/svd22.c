@@ -103,34 +103,34 @@ either expressed or implied, of the FreeBSD Project.
     We then solve for the "singular values matrix" with WS = U'AV. WS
     is often equal to S, except in the case that Sx */
 
-void svd22(const float A[4], float U[4], float S[2], float V[4])
+void svd22(const double A[4], double U[4], double S[2], double V[4])
 {
-    float w, x, y;
+    double w, x, y;
 
     // compute V's phi from A'A
     w = A[0]*A[0] + A[2]*A[2];
     x = A[0]*A[1] + A[2]*A[3];
     y = A[1]*A[1] + A[3]*A[3];
 
-    float phi = 0.5*atan2(2*x, w - y);
+    double phi = 0.5*atan2(2*x, w - y);
 
     // compute U's theta from AA'
     w = A[0]*A[0] + A[1]*A[1];
     x = A[0]*A[2] + A[1]*A[3];
     y = A[2]*A[2] + A[3]*A[3];
 
-    float theta = 0.5*atan2(2*x, w - y);
+    double theta = 0.5*atan2(2*x, w - y);
 
     // Now we'll actually construct U and V (which may be modified
     // later...) For now, they're pure rotations.
-    float ct = cos(theta), st = sin(theta);
+    double ct = cos(theta), st = sin(theta);
 
     U[0] = ct;
     U[1] = -st;
     U[2] = st;
     U[3] = ct;
 
-    float cp = cos(phi), sp = sin(phi);
+    double cp = cos(phi), sp = sin(phi);
 
     V[0] = cp;
     V[1] = -sp;
@@ -141,12 +141,12 @@ void svd22(const float A[4], float U[4], float S[2], float V[4])
     // WS = U'AV.
 
     // WS = U'*A*V
-    float T[4] = { A[0]*V[0] + A[1]*V[2],    // T = A*V
+    double T[4] = { A[0]*V[0] + A[1]*V[2],    // T = A*V
                     A[0]*V[1] + A[1]*V[3],
                     A[2]*V[0] + A[3]*V[2],
                     A[2]*V[1] + A[3]*V[3] };
 
-    float WS[4] = { U[0]*T[0] + U[2]*T[2],   // WS = U'*T = U'*A*V
+    double WS[4] = { U[0]*T[0] + U[2]*T[2],   // WS = U'*T = U'*A*V
                      U[0]*T[1] + U[2]*T[3],
                      U[1]*T[0] + U[3]*T[2],
                      U[1]*T[1] + U[3]*T[3] };
@@ -156,8 +156,8 @@ void svd22(const float A[4], float U[4], float S[2], float V[4])
 
     // Solve for W from WS, being careful to handle singular cases
     // such that W is unitary.
-    float eps = 1E-6;
-    float W[4];
+    double eps = 1E-6;
+    double W[4];
 
     if (S[0] > eps) {
         W[0] = WS[0] / S[0];
@@ -176,12 +176,12 @@ void svd22(const float A[4], float U[4], float S[2], float V[4])
     }
 
     // updated U = UW
-    float UW[4] = { U[0]*W[0] + U[1]*W[2],
+    double UW[4] = { U[0]*W[0] + U[1]*W[2],
                      U[0]*W[1] + U[1]*W[3],
                      U[2]*W[0] + U[3]*W[2],
                      U[2]*W[1] + U[3]*W[3] };
 
-    memcpy(U, UW, 4*sizeof(float));
+    memcpy(U, UW, 4*sizeof(double));
 
     assert(S[0] >= 0);
     assert(S[1] >= 0);
@@ -197,12 +197,12 @@ void svd22(const float A[4], float U[4], float S[2], float V[4])
         // USV' = (UP)(PSP)(PV')
         //      = (UP)(PSP)(VP)'
         //      = (UP)(PSP)(P'V')'
-        float t = S[0];
+        double t = S[0];
         S[0] = S[1];
         S[1] = t;
 
         // exchange columns of U and V
-        float tmp[2];
+        double tmp[2];
         tmp[0] = U[0];
         tmp[1] = U[2];
         U[0] = U[1];

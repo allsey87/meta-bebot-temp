@@ -42,12 +42,12 @@ either expressed or implied, of the FreeBSD Project.
 
 matd_t *homography_compute(zarray_t *correspondences, int flags);
 
-//void homography_project(const matd_t *H, float x, float y, float *ox, float *oy);
-static inline void homography_project(const matd_t *H, float x, float y, float *ox, float *oy)
+//void homography_project(const matd_t *H, double x, double y, double *ox, double *oy);
+static inline void homography_project(const matd_t *H, double x, double y, double *ox, double *oy)
 {
-    float xx = MATD_EL(H, 0, 0)*x + MATD_EL(H, 0, 1)*y + MATD_EL(H, 0, 2);
-    float yy = MATD_EL(H, 1, 0)*x + MATD_EL(H, 1, 1)*y + MATD_EL(H, 1, 2);
-    float zz = MATD_EL(H, 2, 0)*x + MATD_EL(H, 2, 1)*y + MATD_EL(H, 2, 2);
+    double xx = MATD_EL(H, 0, 0)*x + MATD_EL(H, 0, 1)*y + MATD_EL(H, 0, 2);
+    double yy = MATD_EL(H, 1, 0)*x + MATD_EL(H, 1, 1)*y + MATD_EL(H, 1, 2);
+    double zz = MATD_EL(H, 2, 0)*x + MATD_EL(H, 2, 1)*y + MATD_EL(H, 2, 2);
 
     *ox = xx / zz;
     *oy = yy / zz;
@@ -78,7 +78,7 @@ static inline void homography_project(const matd_t *H, float x, float y, float *
 // R20 = H20
 // R21 = H21
 // TZ  = H22
-matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float cy);
+matd_t *homography_to_pose(const matd_t *H, double fx, double fy, double cx, double cy);
 
 // Similar to above
 // Recover the model view matrix assuming that the projection matrix is:
@@ -88,6 +88,6 @@ matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float 
 // [ 0  0  C  D ]
 // [ 0  0 -1  0 ]
 
-matd_t *homography_to_model_view(const matd_t *H, float F, float G, float A, float B, float C, float D);
+matd_t *homography_to_model_view(const matd_t *H, double F, double G, double A, double B, double C, double D);
 
 #endif

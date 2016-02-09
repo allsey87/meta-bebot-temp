@@ -370,7 +370,7 @@ struct quad_decode_task
 struct evaluate_quad_ret
 {
     int64_t rcode;
-    float  score;
+    double  score;
     matd_t  *H, *Hinv;
 
     int decode_status;
@@ -407,7 +407,7 @@ void quad_update_homographies(struct quad *quad)
 // compute a "score" for a quad that is independent of tag family
 // encoding (but dependent upon the tag geometry) by considering the
 // contrast around the exterior of the tag.
-float quad_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad)
+double quad_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad)
 {
     // when sampling from the white border, how much white border do
     // we actually consider valid, measured in bit-cell units? (the
@@ -418,15 +418,15 @@ float quad_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad
     float white_border = 1;
 
     // in tag coordinates, how big is each bit cell?
-    float bit_size = 2.0 / (2*family->black_border + family->d);
-//    float inv_bit_size = 1.0 / bit_size;
+    double bit_size = 2.0 / (2*family->black_border + family->d);
+//    double inv_bit_size = 1.0 / bit_size;
 
     int32_t xmin = INT32_MAX, xmax = 0, ymin = INT32_MAX, ymax = 0;
 
     for (int i = 0; i < 4; i++) {
-        float tx = (i == 0 || i == 3) ? -1 - bit_size : 1 + bit_size;
-        float ty = (i == 0 || i == 1) ? -1 - bit_size : 1 + bit_size;
-        float x, y;
+        double tx = (i == 0 || i == 3) ? -1 - bit_size : 1 + bit_size;
+        double ty = (i == 0 || i == 1) ? -1 - bit_size : 1 + bit_size;
+        double x, y;
 
         homography_project(quad->H, tx, ty, &x, &y);
         xmin = imin(xmin, x);
@@ -458,16 +458,16 @@ float quad_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad
         // projections. Begin by evaluating the homogeneous position
         // [(xmin - .5f), y, 1]. Then, we'll update as we stride in
         // the +x direction.
-        float Hx = MATD_EL(Hinv, 0, 0) * (.5 + (int) xmin) +
+        double Hx = MATD_EL(Hinv, 0, 0) * (.5 + (int) xmin) +
             MATD_EL(Hinv, 0, 1) * (y + .5) + MATD_EL(Hinv, 0, 2);
-        float Hy = MATD_EL(Hinv, 1, 0) * (.5 + (int) xmin) +
+        double Hy = MATD_EL(Hinv, 1, 0) * (.5 + (int) xmin) +
             MATD_EL(Hinv, 1, 1) * (y + .5) + MATD_EL(Hinv, 1, 2);
-        float Hh = MATD_EL(Hinv, 2, 0) * (.5 + (int) xmin) +
+        double Hh = MATD_EL(Hinv, 2, 0) * (.5 + (int) xmin) +
             MATD_EL(Hinv, 2, 1) * (y + .5) + MATD_EL(Hinv, 2, 2);
 
         for (int x = xmin; x <= xmax;  x++) {
             // project the pixel center.
-            float tx, ty;
+            double tx, ty;
 
             // divide by homogeneous coordinate
             tx = Hx / Hh;
@@ -571,7 +571,7 @@ float quad_decode(apriltag_family_t *family, image_u8_t *im, struct quad *quad, 
         1, 0,
         0
 
-        // XXX float-counts the corners.
+        // XXX double-counts the corners.
     };
 
     float sums[2] = { 0, 0 };
@@ -583,13 +583,13 @@ float quad_decode(apriltag_family_t *family, image_u8_t *im, struct quad *quad, 
         int sumidx = pattern[4];
 
         for (int i = 0; i < 2*family->black_border + family->d; i++) {
-            float tagx01 = (pattern[0] + i*pattern[2]) / (2*family->black_border + family->d);
-            float tagy01 = (pattern[1] + i*pattern[3]) / (2*family->black_border + family->d);
+            double tagx01 = (pattern[0] + i*pattern[2]) / (2*family->black_border + family->d);
+            double tagy01 = (pattern[1] + i*pattern[3]) / (2*family->black_border + family->d);
 
-            float tagx = 2*(tagx01-0.5);
-            float tagy = 2*(tagy01-0.5);
+            double tagx = 2*(tagx01-0.5);
+            double tagy = 2*(tagy01-0.5);
 
-            float px, py;
+            double px, py;
             homography_project(quad->H, tagx, tagy, &px, &py);
 
             // don't round
@@ -616,14 +616,14 @@ float quad_decode(apriltag_family_t *family, image_u8_t *im, struct quad *quad, 
         int bitx = bitidx % family->d;
         int bity = bitidx / family->d;
 
-        float tagx01 = (family->black_border + bitx + 0.5) / (2*family->black_border + family->d);
-        float tagy01 = (family->black_border + bity + 0.5) / (2*family->black_border + family->d);
+        double tagx01 = (family->black_border + bitx + 0.5) / (2*family->black_border + family->d);
+        double tagy01 = (family->black_border + bity + 0.5) / (2*family->black_border + family->d);
 
         // scale to [-1, 1]
-        float tagx = 2*(tagx01-0.5);
-        float tagy = 2*(tagy01-0.5);
+        double tagx = 2*(tagx01-0.5);
+        double tagy = 2*(tagy01-0.5);
 
-        float px, py;
+        double px, py;
         homography_project(quad->H, tagx, tagy, &px, &py);
 
         rcode = (rcode << 1);
@@ -651,12 +651,12 @@ float quad_decode(apriltag_family_t *family, image_u8_t *im, struct quad *quad, 
     return score / score_count;
 }
 
-float score_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user)
+double score_goodness(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user)
 {
     return quad_goodness(family, im, quad);
 }
 
-float score_decodability(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user)
+double score_decodability(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user)
 {
     struct quick_decode_entry entry;
 
@@ -667,13 +667,13 @@ float score_decodability(apriltag_family_t *family, image_u8_t *im, struct quad 
 }
 
 // returns score of best quad
-float optimize_quad_generic(apriltag_family_t *family, image_u8_t *im, struct quad *quad0,
+double optimize_quad_generic(apriltag_family_t *family, image_u8_t *im, struct quad *quad0,
                              float *stepsizes, int nstepsizes,
-                             float (*score)(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user),
+                             double (*score)(apriltag_family_t *family, image_u8_t *im, struct quad *quad, void *user),
                              void *user)
 {
     struct quad *best_quad = quad_copy(quad0);
-    float best_score = score(family, im, best_quad, user);
+    double best_score = score(family, im, best_quad, user);
 
     for (int stepsize_idx = 0; stepsize_idx < nstepsizes; stepsize_idx++)  {
 
@@ -699,7 +699,7 @@ float optimize_quad_generic(apriltag_family_t *family, image_u8_t *im, struct qu
                 int nsteps = 1;
 
                 struct quad *this_best_quad = NULL;
-                float this_best_score = best_score;
+                double this_best_score = best_score;
 
                 for (int sx = -nsteps; sx <= nsteps; sx++) {
                     for (int sy = -nsteps; sy <= nsteps; sy++) {
@@ -711,7 +711,7 @@ float optimize_quad_generic(apriltag_family_t *family, image_u8_t *im, struct qu
                         this_quad->p[i][1] = best_quad->p[i][1] + sy*stepsize;
                         quad_update_homographies(this_quad);
 
-                        float this_score = score(family, im, this_quad, user);
+                        double this_score = score(family, im, this_quad, user);
 
                         if (this_score > this_best_score) {
                             quad_destroy(this_best_quad);
@@ -743,15 +743,15 @@ float optimize_quad_generic(apriltag_family_t *family, image_u8_t *im, struct qu
 
 static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct quad *quad)
 {
-    float lines[4][4]; // for each line, [Ex Ey nx ny]
+    double lines[4][4]; // for each line, [Ex Ey nx ny]
 
     for (int edge = 0; edge < 4; edge++) {
         int a = edge, b = (edge + 1) & 3; // indices of the end points.
 
         // compute the normal to the current line estimate
-        float nx = quad->p[b][1] - quad->p[a][1];
-        float ny = -quad->p[b][0] + quad->p[a][0];
-        float mag = sqrt(nx*nx + ny*ny);
+        double nx = quad->p[b][1] - quad->p[a][1];
+        double ny = -quad->p[b][0] + quad->p[a][0];
+        double mag = sqrt(nx*nx + ny*ny);
         nx /= mag;
         ny /= mag;
 
@@ -761,21 +761,21 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
         int nsamples = imax(16, mag / 8); // XXX tunable
 
         // stats for fitting a line...
-        float Mx = 0, My = 0, Mxx = 0, Mxy = 0, Myy = 0, N = 0;
+        double Mx = 0, My = 0, Mxx = 0, Mxy = 0, Myy = 0, N = 0;
 
         for (int s = 0; s < nsamples; s++) {
             // compute a point along the line... Note, we're avoiding
             // sampling *right* at the corners, since those points are
             // the least reliable.
-            float alpha = (1.0 + s) / (nsamples + 1);
-            float x0 = alpha*quad->p[a][0] + (1-alpha)*quad->p[b][0];
-            float y0 = alpha*quad->p[a][1] + (1-alpha)*quad->p[b][1];
+            double alpha = (1.0 + s) / (nsamples + 1);
+            double x0 = alpha*quad->p[a][0] + (1-alpha)*quad->p[b][0];
+            double y0 = alpha*quad->p[a][1] + (1-alpha)*quad->p[b][1];
 
             // search along the normal to this line, looking at the
             // gradients along the way. We're looking for a strong
             // response.
-            float Mn = 0;
-            float Mcount = 0;
+            double Mn = 0;
+            double Mcount = 0;
 
             // XXX tunable: how far to search?  We want to search far
             // enough that we find the best edge, but not so far that
@@ -785,10 +785,10 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
             // search on another pixel in the first place. Likewise,
             // for very small tags, we don't want the range to be too
             // big.
-            float range = fmin(td->quad_decimate + 1, mag / 10);
+            double range = fmin(td->quad_decimate + 1, mag / 10);
 
             // XXX tunable step size.
-            for (float n = -range; n <= range; n +=  0.25) {
+            for (double n = -range; n <= range; n +=  0.25) {
                 // Because of the guaranteed winding order of the
                 // points in the quad, we will start inside the white
                 // portion of the quad and work our way outward.
@@ -797,7 +797,7 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
                 // how far +/- to look? Small values compute the
                 // gradient more precisely, but are more sensitive to
                 // noise.
-                float grange = 1;
+                double grange = 1;
                 int x1 = x0 + (n + grange)*nx;
                 int y1 = y0 + (n + grange)*ny;
                 if (x1 < 0 || x1 >= im_orig->width || y1 < 0 || y1 >= im_orig->height)
@@ -814,7 +814,7 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
                 if (g1 < g2) // reject points whose gradient is "backwards". They can only hurt us.
                     continue;
 
-                float weight = (g2 - g1)*(g2 - g1); // XXX tunable. What shape for weight=f(g2-g1)?
+                double weight = (g2 - g1)*(g2 - g1); // XXX tunable. What shape for weight=f(g2-g1)?
 
                 // compute weighted average of the gradient at this point.
                 Mn += weight*n;
@@ -822,11 +822,11 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
             }
 
             // what was the average point along the line?
-            float n0 = Mn / Mcount;
+            double n0 = Mn / Mcount;
 
             // where is the point along the line?
-            float bestx = x0 + n0*nx;
-            float besty = y0 + n0*ny;
+            double bestx = x0 + n0*nx;
+            double besty = y0 + n0*ny;
 
             // update our line fit statistics
             Mx += bestx;
@@ -838,12 +838,12 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
         }
 
         // fit a line
-        float Ex = Mx / N, Ey = My / N;
-        float Cxx = Mxx / N - Ex*Ex;
-        float Cxy = Mxy / N - Ex*Ey;
-        float Cyy = Myy / N - Ey*Ey;
+        double Ex = Mx / N, Ey = My / N;
+        double Cxx = Mxx / N - Ex*Ex;
+        double Cxy = Mxy / N - Ex*Ey;
+        double Cyy = Myy / N - Ey*Ey;
 
-        float normal_theta = .5 * atan2f(-2*Cxy, (Cyy - Cxx));
+        double normal_theta = .5 * atan2f(-2*Cxy, (Cyy - Cxx));
         nx = cosf(normal_theta);
         ny = sinf(normal_theta);
         lines[edge][0] = Ex;
@@ -855,18 +855,18 @@ static void refine_edges(apriltag_detector_t *td, image_u8_t *im_orig, struct qu
     // now refit the corners of the quad
     for (int i = 0; i < 4; i++) {
         // solve for the intersection of lines (i) and (i+1)&3.
-        float A00 =  lines[i][3],  A01 = -lines[(i+1)&3][3];
-        float A10 =  -lines[i][2],  A11 = lines[(i+1)&3][2];
-        float B0 = -lines[i][0] + lines[(i+1)&3][0];
-        float B1 = -lines[i][1] + lines[(i+1)&3][1];
+        double A00 =  lines[i][3],  A01 = -lines[(i+1)&3][3];
+        double A10 =  -lines[i][2],  A11 = lines[(i+1)&3][2];
+        double B0 = -lines[i][0] + lines[(i+1)&3][0];
+        double B1 = -lines[i][1] + lines[(i+1)&3][1];
 
-        float det = A00 * A11 - A10 * A01;
+        double det = A00 * A11 - A10 * A01;
 
         // inverse.
-        float W00 = A11 / det, W01 = -A01 / det;
+        double W00 = A11 / det, W01 = -A01 / det;
         if (fabs(det) > 0.001) {
             // solve
-            float L0 = W00*B0 + W01*B1;
+            double L0 = W00*B0 + W01*B1;
 
             // compute intersection
             quad->p[i][0] = lines[i][0] + L0*A00;
@@ -898,7 +898,7 @@ static void quad_decode_task(void *_u)
             apriltag_family_t *family;
             zarray_get(td->tag_families, famidx, &family);
 
-            float goodness = 0;
+            double goodness = 0;
 
             // since the geometry of tag families can vary, start any
             // optimization process over with the original quad.
@@ -942,8 +942,8 @@ static void quad_decode_task(void *_u)
                 det->goodness = goodness;
                 det->decision_margin = decision_margin;
 
-                float theta = -entry.rotation * M_PI / 2.0;
-                float c = cos(theta), s = sin(theta);
+                double theta = -entry.rotation * M_PI / 2.0;
+                double c = cos(theta), s = sin(theta);
 
                 matd_t *R = matd_create(3,3);
                 MATD_EL(R, 0, 0) = c;
@@ -964,7 +964,7 @@ static void quad_decode_task(void *_u)
                     int tcx = (i == 0 || i == 3) ? -1 : 1;
                     int tcy = (i < 2) ? -1 : 1;
 
-                    float p[2];
+                    double p[2];
 
                     homography_project(det->H, tcx, tcy, &p[0], &p[1]);
 
@@ -1253,7 +1253,7 @@ zarray_t *apriltag_detector_detect(apriltag_detector_t *td, image_u8_t *im_orig)
         // assume letter, which is 612x792 points.
         FILE *f = fopen("debug_output.ps", "w");
         fprintf(f, "%%!PS\n\n");
-        float scale = fmin(612.0/darker->width, 792.0/darker->height);
+        double scale = fmin(612.0/darker->width, 792.0/darker->height);
         fprintf(f, "%f %f scale\n", scale, scale);
         fprintf(f, "0 %d translate\n", darker->height);
         fprintf(f, "1 -1 scale\n");
@@ -1272,7 +1272,7 @@ zarray_t *apriltag_detector_detect(apriltag_detector_t *td, image_u8_t *im_orig)
             //   |    |
             // a |----| b
 
-            float a[2], b[2], c[2], d[2];
+            double a[2], b[2], c[2], d[2];
 
             homography_project(det->H, -1, -1, &a[0], &a[1]);
             homography_project(det->H,  1, -1, &b[0], &b[1]);
@@ -1310,7 +1310,7 @@ zarray_t *apriltag_detector_detect(apriltag_detector_t *td, image_u8_t *im_orig)
         image_u8_darken(im);
 
         // assume letter, which is 612x792 points.
-        float scale = fmin(612.0/im->width, 792.0/im->height);
+        double scale = fmin(612.0/im->width, 792.0/im->height);
         fprintf(f, "%f %f scale\n", scale, scale);
         fprintf(f, "0 %d translate\n", im->height);
         fprintf(f, "1 -1 scale\n");

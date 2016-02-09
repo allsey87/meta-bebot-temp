@@ -32,6 +32,6 @@ either expressed or implied, of the FreeBSD Project.
 #ifndef _SVD22_H
 #define _SVD22_H
 
-void svd22(const float A[4], float U[4], float S[2], float V[4]);
+void svd22(const double A[4], double U[4], double S[2], double V[4]);
 
 #endif

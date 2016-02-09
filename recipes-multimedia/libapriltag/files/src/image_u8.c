@@ -42,7 +42,7 @@ either expressed or implied, of the FreeBSD Project.
 // needed for RGB in 8-wide vector processing)
 #define DEFAULT_ALIGNMENT 96
 
-static inline float sq(float v)
+static inline double sq(double v)
 {
     return v*v;
 }
@@ -231,8 +231,8 @@ void image_u8_draw_annulus(image_u8_t *im, float x0, float y0, float r0, float r
 // only widths 1 and 3 supported
 void image_u8_draw_line(image_u8_t *im, float x0, float y0, float x1, float y1, int v, int width)
 {
-    float dist = sqrtf((y1-y0)*(y1-y0) + (x1-x0)*(x1-x0));
-    float delta = 0.5 / dist;
+    double dist = sqrtf((y1-y0)*(y1-y0) + (x1-x0)*(x1-x0));
+    double delta = 0.5 / dist;
 
     // terrible line drawing code
     for (float f = 0; f <= 1; f += delta) {
@@ -281,23 +281,23 @@ static void convolve(const uint8_t *x, uint8_t *y, int sz, const uint8_t *k, int
         y[i] = x[i];
 }
 
-void image_u8_gaussian_blur(image_u8_t *im, float sigma, int ksz)
+void image_u8_gaussian_blur(image_u8_t *im, double sigma, int ksz)
 {
     assert((ksz & 1) == 1); // ksz must be odd.
 
     // build the kernel.
-    float dk[ksz];
+    double dk[ksz];
 
     // for kernel of length 5:
     // dk[0] = f(-2), dk[1] = f(-1), dk[2] = f(0), dk[3] = f(1), dk[4] = f(2)
     for (int i = 0; i < ksz; i++) {
         int x = -ksz/2 + i;
-        float v = exp(-.5*sq(x / sigma));
+        double v = exp(-.5*sq(x / sigma));
         dk[i] = v;
     }
 
     // normalize
-    float acc = 0;
+    double acc = 0;
     for (int i = 0; i < ksz; i++)
         acc += dk[i];
 
@@ -335,7 +335,7 @@ void image_u8_gaussian_blur(image_u8_t *im, float sigma, int ksz)
     }
 }
 
-image_u8_t *image_u8_rotate(const image_u8_t *in, float rad, uint8_t pad)
+image_u8_t *image_u8_rotate(const image_u8_t *in, double rad, uint8_t pad)
 {
     int iwidth = in->width, iheight = in->height;
     rad = -rad; // interpret y as being "down"
@@ -617,8 +617,8 @@ void image_u8_fill_line_max(image_u8_t *im, const image_u8_lut_t *lut, const flo
     float max_dist = sqrt(max_dist2);
 
     // the orientation of the line
-    float theta = atan2(xy1[1]-xy0[1], xy1[0]-xy0[0]);
-    float v = sin(theta), u = cos(theta);
+    double theta = atan2(xy1[1]-xy0[1], xy1[0]-xy0[0]);
+    double v = sin(theta), u = cos(theta);
 
     int ix0 = iclamp(fmin(xy0[0], xy1[0]) - max_dist, 0, im->width-1);
     int ix1 = iclamp(fmax(xy0[0], xy1[0]) + max_dist, 0, im->width-1);
@@ -651,7 +651,7 @@ void image_u8_fill_line_max(image_u8_t *im, const image_u8_lut_t *lut, const flo
             float px = xy0[0] + line_coord*u;
             float py = xy0[1] + line_coord*v;
 
-            float dist2 = (x-px)*(x-px) + (y-py)*(y-py);
+            double dist2 = (x-px)*(x-px) + (y-py)*(y-py);
 
             // not in our LUT?
             int idx = dist2 * lut->scale;

@@ -171,8 +171,8 @@ static inline void TFN(performance)(TTYPENAME *hash)
         cnt++;
     }
 
-    float Ex1 = 1.0 * run1 / cnt;
-    float Ex2 = 1.0 * run2 / cnt;
+    double Ex1 = 1.0 * run1 / cnt;
+    double Ex2 = 1.0 * run2 / cnt;
 
 #define strr(s) #s
 #define str(s) strr(s)

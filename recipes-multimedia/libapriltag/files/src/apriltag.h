@@ -37,13 +37,13 @@ extern "C" {
 #endif
 
 #include <stdlib.h>
-#include <pthread.h>
 
 #include "matd.h"
 #include "image_u8.h"
 #include "zarray.h"
 #include "workerpool.h"
 #include "timeprofile.h"
+#include <pthread.h>
 
 #define APRILTAG_TASKS_PER_THREAD_TARGET 10
 
@@ -236,11 +236,11 @@ struct apriltag_detection
     matd_t *H;
 
     // The center of the detection in image pixel coordinates.
-    float c[2];
+    double c[2];
 
     // The corners of the tag in image pixel coordinates. These always
     // wrap counter-clock wise around the tag.
-    float p[4][2];
+    double p[4][2];
 };
 
 // don't forget to add a family!

@@ -47,8 +47,8 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
 {
     // compute centroids of both sets of points (yields a better
     // conditioned information matrix)
-    float x_cx = 0, x_cy = 0;
-    float y_cx = 0, y_cy = 0;
+    double x_cx = 0, x_cy = 0;
+    double y_cx = 0, y_cy = 0;
 
     for (int i = 0; i < zarray_size(correspondences); i++) {
         float *c;
@@ -68,7 +68,7 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
 
     // NB We don't normalize scale; it seems implausible that it could
     // possibly make any difference given the dynamic range of IEEE
-    // floats.
+    // doubles.
 
     matd_t *A = matd_create(9,9);
     for (int i = 0; i < zarray_size(correspondences); i++) {
@@ -76,17 +76,17 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
         zarray_get_volatile(correspondences, i, &c);
 
         // (below world is "x", and image is "y")
-        float worldx = c[0] - x_cx;
-        float worldy = c[1] - x_cy;
-        float imagex = c[2] - y_cx;
-        float imagey = c[3] - y_cy;
+        double worldx = c[0] - x_cx;
+        double worldy = c[1] - x_cy;
+        double imagex = c[2] - y_cx;
+        double imagey = c[3] - y_cy;
 
-        float a03 = -worldx;
-        float a04 = -worldy;
-        float a05 = -1;
-        float a06 = worldx*imagey;
-        float a07 = worldy*imagey;
-        float a08 = imagey;
+        double a03 = -worldx;
+        double a04 = -worldy;
+        double a05 = -1;
+        double a06 = worldx*imagey;
+        double a07 = worldy*imagey;
+        double a08 = imagey;
 
         MATD_EL(A, 3, 3) += a03*a03;
         MATD_EL(A, 3, 4) += a03*a04;
@@ -110,12 +110,12 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
         MATD_EL(A, 7, 8) += a07*a08;
         MATD_EL(A, 8, 8) += a08*a08;
 
-        float a10 = worldx;
-        float a11 = worldy;
-        float a12 = 1;
-        float a16 = -worldx*imagex;
-        float a17 = -worldy*imagex;
-        float a18 = -imagex;
+        double a10 = worldx;
+        double a11 = worldy;
+        double a12 = 1;
+        double a16 = -worldx*imagex;
+        double a17 = -worldy*imagex;
+        double a18 = -imagex;
 
         MATD_EL(A, 0, 0) += a10*a10;
         MATD_EL(A, 0, 1) += a10*a11;
@@ -139,12 +139,12 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
         MATD_EL(A, 7, 8) += a17*a18;
         MATD_EL(A, 8, 8) += a18*a18;
 
-        float a20 = -worldx*imagey;
-        float a21 = -worldy*imagey;
-        float a22 = -imagey;
-        float a23 = worldx*imagex;
-        float a24 = worldy*imagex;
-        float a25 = imagex;
+        double a20 = -worldx*imagey;
+        double a21 = -worldy*imagey;
+        double a22 = -imagey;
+        double a23 = worldx*imagex;
+        double a24 = worldy*imagex;
+        double a25 = imagex;
 
         MATD_EL(A, 0, 0) += a20*a20;
         MATD_EL(A, 0, 1) += a20*a21;
@@ -181,7 +181,7 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
 
         if (1) {
             matd_t *Ainv = matd_inverse(A);
-            float scale = 0;
+            double scale = 0;
 
             for (int i = 0; i < 9; i++)
                 scale += sq(MATD_EL(Ainv, i, 0));
@@ -194,7 +194,7 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
             matd_destroy(Ainv);
         } else {
 
-            matd_t *b = matd_create_data(9, 1, (float[]) { 1, 0, 0, 0, 0, 0, 0, 0, 0 });
+            matd_t *b = matd_create_data(9, 1, (double[]) { 1, 0, 0, 0, 0, 0, 0, 0, 0 });
             matd_t *Ainv = NULL;
 
             if (0) {
@@ -207,7 +207,7 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
                 matd_chol_destroy(chol);
             }
 
-            float scale = 0;
+            double scale = 0;
 
             for (int i = 0; i < 9; i++)
                 scale += sq(MATD_EL(Ainv, i, 0));
@@ -281,24 +281,24 @@ matd_t *homography_compute(zarray_t *correspondences, int flags)
 // R21 = H21
 // TZ  = H22
 
-matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float cy)
+matd_t *homography_to_pose(const matd_t *H, double fx, double fy, double cx, double cy)
 {
     // Note that every variable that we compute is proportional to the scale factor of H.
-    float R20 = MATD_EL(H, 2, 0);
-    float R21 = MATD_EL(H, 2, 1);
-    float TZ  = MATD_EL(H, 2, 2);
-    float R00 = (MATD_EL(H, 0, 0) - cx*R20) / fx;
-    float R01 = (MATD_EL(H, 0, 1) - cx*R21) / fx;
-    float TX  = (MATD_EL(H, 0, 2) - cx*TZ)  / fx;
-    float R10 = (MATD_EL(H, 1, 0) - cy*R20) / fy;
-    float R11 = (MATD_EL(H, 1, 1) - cy*R21) / fy;
-    float TY  = (MATD_EL(H, 1, 2) - cy*TZ)  / fy;
+    double R20 = MATD_EL(H, 2, 0);
+    double R21 = MATD_EL(H, 2, 1);
+    double TZ  = MATD_EL(H, 2, 2);
+    double R00 = (MATD_EL(H, 0, 0) - cx*R20) / fx;
+    double R01 = (MATD_EL(H, 0, 1) - cx*R21) / fx;
+    double TX  = (MATD_EL(H, 0, 2) - cx*TZ)  / fx;
+    double R10 = (MATD_EL(H, 1, 0) - cy*R20) / fy;
+    double R11 = (MATD_EL(H, 1, 1) - cy*R21) / fy;
+    double TY  = (MATD_EL(H, 1, 2) - cy*TZ)  / fy;
 
     // compute the scale by requiring that the rotation columns are unit length
     // (Use geometric average of the two length vectors we have)
-    float length1 = sqrtf(R00*R00 + R10*R10 + R20*R20);
-    float length2 = sqrtf(R01*R01 + R11*R11 + R21*R21);
-    float s = 1.0 / sqrtf(length1 * length2);
+    double length1 = sqrtf(R00*R00 + R10*R10 + R20*R20);
+    double length2 = sqrtf(R01*R01 + R11*R11 + R21*R21);
+    double s = 1.0 / sqrtf(length1 * length2);
 
     // get sign of S by requiring the tag to be behind the camera.
     if (TZ > 0)
@@ -315,9 +315,9 @@ matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float 
     TY  *= s;
 
     // now recover [R02 R12 R22] by noting that it is the cross product of the other two columns.
-    float R02 = R10*R21 - R20*R11;
-    float R12 = R20*R01 - R00*R21;
-    float R22 = R00*R11 - R10*R01;
+    double R02 = R10*R21 - R20*R11;
+    double R12 = R20*R01 - R00*R21;
+    double R22 = R00*R11 - R10*R01;
 
     // Improve rotation matrix by applying polar decomposition.
     if (1) {
@@ -325,7 +325,7 @@ matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float 
         // "proper", but probably increases the reprojection error. An
         // iterative alignment step would be superior.
 
-        matd_t *R = matd_create_data(3, 3, (float[]) { R00, R01, R02,
+        matd_t *R = matd_create_data(3, 3, (double[]) { R00, R01, R02,
                                                        R10, R11, R12,
                                                        R20, R21, R22 });
 
@@ -351,7 +351,7 @@ matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float 
         matd_destroy(R);
     }
 
-    return matd_create_data(4, 4, (float[]) { R00, R01, R02, TX,
+    return matd_create_data(4, 4, (double[]) { R00, R01, R02, TX,
                                                R10, R11, R12, TY,
                                                R20, R21, R22, TZ,
                                                 0, 0, 0, 1 });
@@ -365,24 +365,24 @@ matd_t *homography_to_pose(const matd_t *H, float fx, float fy, float cx, float 
 // [ 0  0  C  D ]
 // [ 0  0 -1  0 ]
 
-matd_t *homography_to_model_view(const matd_t *H, float F, float G, float A, float B, float C, float D)
+matd_t *homography_to_model_view(const matd_t *H, double F, double G, double A, double B, double C, double D)
 {
     // Note that every variable that we compute is proportional to the scale factor of H.
-    float R20 = -MATD_EL(H, 2, 0);
-    float R21 = -MATD_EL(H, 2, 1);
-    float TZ  = -MATD_EL(H, 2, 2);
-    float R00 = (MATD_EL(H, 0, 0) - A*R20) / F;
-    float R01 = (MATD_EL(H, 0, 1) - A*R21) / F;
-    float TX  = (MATD_EL(H, 0, 2) - A*TZ)  / F;
-    float R10 = (MATD_EL(H, 1, 0) - B*R20) / G;
-    float R11 = (MATD_EL(H, 1, 1) - B*R21) / G;
-    float TY  = (MATD_EL(H, 1, 2) - B*TZ)  / G;
+    double R20 = -MATD_EL(H, 2, 0);
+    double R21 = -MATD_EL(H, 2, 1);
+    double TZ  = -MATD_EL(H, 2, 2);
+    double R00 = (MATD_EL(H, 0, 0) - A*R20) / F;
+    double R01 = (MATD_EL(H, 0, 1) - A*R21) / F;
+    double TX  = (MATD_EL(H, 0, 2) - A*TZ)  / F;
+    double R10 = (MATD_EL(H, 1, 0) - B*R20) / G;
+    double R11 = (MATD_EL(H, 1, 1) - B*R21) / G;
+    double TY  = (MATD_EL(H, 1, 2) - B*TZ)  / G;
 
     // compute the scale by requiring that the rotation columns are unit length
     // (Use geometric average of the two length vectors we have)
-    float length1 = sqrtf(R00*R00 + R10*R10 + R20*R20);
-    float length2 = sqrtf(R01*R01 + R11*R11 + R21*R21);
-    float s = 1.0 / sqrtf(length1 * length2);
+    double length1 = sqrtf(R00*R00 + R10*R10 + R20*R20);
+    double length2 = sqrtf(R01*R01 + R11*R11 + R21*R21);
+    double s = 1.0 / sqrtf(length1 * length2);
 
     // get sign of S by requiring the tag to be behind the camera.
     if (TZ > 0)
@@ -399,13 +399,13 @@ matd_t *homography_to_model_view(const matd_t *H, float F, float G, float A, flo
     TY  *= s;
 
     // now recover [R02 R12 R22] by noting that it is the cross product of the other two columns.
-    float R02 = R10*R21 - R20*R11;
-    float R12 = R20*R01 - R00*R21;
-    float R22 = R00*R11 - R10*R01;
+    double R02 = R10*R21 - R20*R11;
+    double R12 = R20*R01 - R00*R21;
+    double R22 = R00*R11 - R10*R01;
 
     // TODO XXX: Improve rotation matrix by applying polar decomposition.
 
-    return matd_create_data(4, 4, (float[]) { R00, R01, R02, TX,
+    return matd_create_data(4, 4, (double[]) { R00, R01, R02, TX,
         R10, R11, R12, TY,
         R20, R21, R22, TZ,
         0, 0, 0, 1 });
@@ -413,23 +413,23 @@ matd_t *homography_to_model_view(const matd_t *H, float F, float G, float A, flo
 
 // Only uses the upper 3x3 matrix.
 /*
-static void matrix_to_quat(const matd_t *R, float q[4])
+static void matrix_to_quat(const matd_t *R, double q[4])
 {
     // see: "from quaternion to matrix and back"
 
     // trace: get the same result if R is 4x4 or 3x3:
-    float T = MATD_EL(R, 0, 0) + MATD_EL(R, 1, 1) + MATD_EL(R, 2, 2) + 1;
-    float S = 0;
+    double T = MATD_EL(R, 0, 0) + MATD_EL(R, 1, 1) + MATD_EL(R, 2, 2) + 1;
+    double S = 0;
 
-    float m0  = MATD_EL(R, 0, 0);
-    float m1  = MATD_EL(R, 1, 0);
-    float m2  = MATD_EL(R, 2, 0);
-    float m4  = MATD_EL(R, 0, 1);
-    float m5  = MATD_EL(R, 1, 1);
-    float m6  = MATD_EL(R, 2, 1);
-    float m8  = MATD_EL(R, 0, 2);
-    float m9  = MATD_EL(R, 1, 2);
-    float m10 = MATD_EL(R, 2, 2);
+    double m0  = MATD_EL(R, 0, 0);
+    double m1  = MATD_EL(R, 1, 0);
+    double m2  = MATD_EL(R, 2, 0);
+    double m4  = MATD_EL(R, 0, 1);
+    double m5  = MATD_EL(R, 1, 1);
+    double m6  = MATD_EL(R, 2, 1);
+    double m8  = MATD_EL(R, 0, 2);
+    double m9  = MATD_EL(R, 1, 2);
+    double m10 = MATD_EL(R, 2, 2);
 
     if (T > 0.0000001) {
         S = sqrtf(T) * 2;
@@ -458,19 +458,19 @@ static void matrix_to_quat(const matd_t *R, float q[4])
         q[0] = (m4 - m1 ) / S;
     }
 
-    float mag2 = 0;
+    double mag2 = 0;
     for (int i = 0; i < 4; i++)
         mag2 += q[i]*q[i];
-    float norm = 1.0 / sqrtf(mag2);
+    double norm = 1.0 / sqrtf(mag2);
     for (int i = 0; i < 4; i++)
         q[i] *= norm;
 }
 */
 
 // overwrites upper 3x3 area of matrix M. Doesn't touch any other elements of M.
-void quat_to_matrix(const float q[4], matd_t *M)
+void quat_to_matrix(const double q[4], matd_t *M)
 {
-    float w = q[0], x = q[1], y = q[2], z = q[3];
+    double w = q[0], x = q[1], y = q[2], z = q[3];
 
     MATD_EL(M, 0, 0) = w*w + x*x - y*y - z*z;
     MATD_EL(M, 0, 1) = 2*x*y - 2*w*z;

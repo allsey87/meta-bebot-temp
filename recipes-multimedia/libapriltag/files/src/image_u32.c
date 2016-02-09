@@ -188,8 +188,8 @@ finish:
 // only widths 1 and 3 supported
 void image_u32_draw_line(image_u32_t *im, float x0, float y0, float x1, float y1, uint32_t v, int width)
 {
-    float dist = sqrtf((y1-y0)*(y1-y0) + (x1-x0)*(x1-x0));
-    float delta = 0.5 / dist;
+    double dist = sqrtf((y1-y0)*(y1-y0) + (x1-x0)*(x1-x0));
+    double delta = 0.5 / dist;
 
     // terrible line drawing code
     for (float f = 0; f <= 1; f += delta) {

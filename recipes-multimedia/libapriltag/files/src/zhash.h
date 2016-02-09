@@ -49,7 +49,7 @@ extern "C" {
  *          for bytes: zhash_create(sizeof(uint8_t), sizeof(uint8_t)...)
  *   - Entries are copied by value. This means you must always pass a reference to the start
  *     of 'key_size' and 'value_size' bytes, which you have already malloc'd or stack allocated
- *   - This data structure can be used to store types of any size, from bytes & floats to
+ *   - This data structure can be used to store types of any size, from bytes & doubles to
  *     user defined structs
  *     Note: if zhash stores pointers, user must be careful to manually manage the lifetime
  *     of the memory they point to.
@@ -107,7 +107,7 @@ void zhash_destroy(zhash_t *zh);
 
 /**
  * Creates and returns a new identical copy of the zhash (i.e. a "shallow" copy).
- * If you're storing pointers, be sure not to float free their pointees!
+ * If you're storing pointers, be sure not to double free their pointees!
  * It is the caller's responsibility to call zhash_destroy() on the returned array
  * when it is no longer needed (in addition to the zhash_destroy() call for the
  * original zhash).
@@ -295,7 +295,7 @@ void zhash_map_values(zhash_t *zh, void (*f)());
  * The function may be NULL, in which case no action is taken.
  *
  * NOTE: zhash_vmap_keys() can only be used with pointer-data keys.
- * Use with non-pointer keys (i.e. integer, float, etc.) will likely cause a
+ * Use with non-pointer keys (i.e. integer, double, etc.) will likely cause a
  * segmentation fault.
  */
 void zhash_vmap_keys(zhash_t *vh, void (*f)());
@@ -308,7 +308,7 @@ void zhash_vmap_keys(zhash_t *vh, void (*f)());
  * The function may be NULL, in which case no action is taken.
  *
  * NOTE: zhash_vmap_values() can only be used with pointer-data values.
- * Use with non-pointer values (i.e. integer, float, etc.) will likely cause a
+ * Use with non-pointer values (i.e. integer, double, etc.) will likely cause a
  * segmentation fault.
  */
 void zhash_vmap_values(zhash_t *vh, void (*f)());

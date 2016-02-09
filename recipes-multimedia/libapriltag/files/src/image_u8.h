@@ -81,7 +81,7 @@ void image_u8_draw_circle(image_u8_t *im, float x0, float y0, float r, int v);
 
 void image_u8_clear(image_u8_t *im);
 void image_u8_darken(image_u8_t *im);
-void image_u8_gaussian_blur(image_u8_t *im, float sigma, int k);
+void image_u8_gaussian_blur(image_u8_t *im, double sigma, int k);
 
 // 1.5, 2, 3, 4, ... supported
 image_u8_t *image_u8_decimate(image_u8_t *im, float factor);
@@ -96,7 +96,7 @@ int image_u8_write_pnm(const image_u8_t *im, const char *path);
 // sense", i.e., if Y were up. When input values are unavailable, the
 // value 'pad' is inserted instead. The geometric center of the output
 // image corresponds to the geometric center of the input image.
-image_u8_t *image_u8_rotate(const image_u8_t *in, float rad, uint8_t pad);
+image_u8_t *image_u8_rotate(const image_u8_t *in, double rad, uint8_t pad);
 
 #ifdef __cplusplus
 }
