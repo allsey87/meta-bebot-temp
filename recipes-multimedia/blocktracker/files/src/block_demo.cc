@@ -271,9 +271,6 @@ void CBlockDemo::Exec() {
 
    const int8_t pnDriveSystemStop[] = {0, 0};
 
-   std::list<SBlock> lstDetectedBlocks;
-   std::list<STarget> lstTrackedTargets;
-
    unsigned int unTargetId = -1;
    unsigned int unControlTick = -1;
 
@@ -298,10 +295,9 @@ void CBlockDemo::Exec() {
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
    /* Enable charging for the electromagnetic capacitors */
-   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, false);
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);
    
    /* Allow the electromagnet capacitors to charge to 50% so that we don't brown out the remote power supply */
-   /*
    while(!bShutdownSignal) {        
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
       if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
@@ -313,14 +309,15 @@ void CBlockDemo::Exec() {
                std::cerr << "OK" << std::endl;
                break;
             }
+            else {
+               std::cerr << (punPacketData[0] * 100.0f) / (0x80 * 1.0f) << "% ";
+            }
          }
       }
       sleep(1);
    }
-   */
    
    /* Start calibration of the lift actuator */
-   /*
    std::cerr << "Calibrating the lift actuator: ";
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::CALIBRATE_LIFT_ACTUATOR);
 
@@ -339,7 +336,6 @@ void CBlockDemo::Exec() {
       }
       sleep(1);
    }
-   */
    
    /* grab a couple frames to allow the sensor to adjust to the lighting conditions */
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
@@ -359,7 +355,7 @@ void CBlockDemo::Exec() {
          /* capture a frame  from the camera interface */
          m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
                                         m_psSensorData->ImageSensor.U,
-                                        m_psSensorData->ImageSensor.V);                                     
+                                        m_psSensorData->ImageSensor.V);                                 
       }
 
       /* wait for responses from the manipulator interface */
@@ -452,19 +448,21 @@ void CBlockDemo::Exec() {
       
       /******** DO IMAGE PROCESSING ********/   
       if(m_psSensorData->ImageSensor.Enable) {
-         //m_pcBlockSensor->SetCameraPosition();
-         lstDetectedBlocks.clear();  
+         /* Reset the list of detected blocks */
+         m_psSensorData->ImageSensor.Detections.Blocks.clear();
+         /* Populate that list with new detections */
          m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y,
                                        m_psSensorData->ImageSensor.U,
                                        m_psSensorData->ImageSensor.V,
-                                       lstDetectedBlocks);
+                                       m_psSensorData->ImageSensor.Detections.Blocks);
 
-         // TODO pass the time in miliseconds to track targets to allow for protectile based matching        
-         //m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, lstTrackedTargets);                          
+         /* Associate detections to a set of targets */
+         m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
+                                                    m_psSensorData->ImageSensor.Detections.Targets);                          
       }
       
-      for(unsigned int block_list_idx = 0; block_list_idx < lstDetectedBlocks.size(); block_list_idx++) {
-         std::list<SBlock>::iterator itBlock = std::begin(lstDetectedBlocks);
+      for(unsigned int block_list_idx = 0; block_list_idx < m_psSensorData->ImageSensor.Detections.Blocks.size(); block_list_idx++) {
+         std::list<SBlock>::iterator itBlock = std::begin(m_psSensorData->ImageSensor.Detections.Blocks);
          std::advance(itBlock, block_list_idx);
       
          std::cerr << "Block (" << block_list_idx << ")" << std::endl
@@ -485,7 +483,7 @@ void CBlockDemo::Exec() {
       }
       
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = false; // m_pcManipulatorTestingTask->Step();
+      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
 
       /* Output the current state of the state machine */
       std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
@@ -519,19 +517,19 @@ void CBlockDemo::Exec() {
          if(m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx]) {
             switch(m_psActuatorData->LEDDeck.Color[unLEDIdx]) {
             case EColor::RED:
-               m_vecLEDs.at(unLEDIdx).SetRed(0x40);
+               m_vecLEDs.at(unLEDIdx).SetRed(0x30);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
                m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
                break;
             case EColor::GREEN:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
-               m_vecLEDs.at(unLEDIdx).SetGreen(0x40);
+               m_vecLEDs.at(unLEDIdx).SetGreen(0x30);
                m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
                break;
             case EColor::BLUE:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
-               m_vecLEDs.at(unLEDIdx).SetBlue(0x40);               
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x30);               
                break;
             }
             m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx] = false;
@@ -585,21 +583,10 @@ void CBlockDemo::Exec() {
          /* clear the update request */
          m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq = false;
       }
-
-      // DEBUG
-      if(!lstTrackedTargets.empty()) {        
-         const std::list<SBlock>& lstObservations = std::begin(lstTrackedTargets)->Observations;
-         const SBlock& sBlock = *std::begin(lstObservations);
-
-         //std::cerr << "[Coords]" << "{" << sBlock.X << ", " << sBlock.Y << ", " << sBlock.Z << "}" << std::endl;
-         //std::cerr << "[Angles]" << "{" << sBlock.Yaw << ", " << sBlock.Pitch << ", " << sBlock.Roll << "}" << std::endl;
-         //std::cerr << "---" << std::endl;
-      }
-      
      
       /* Annotate the frame if requested */
       if(m_bAnnotateImages) {
-         for(const STarget& s_target : lstTrackedTargets) {
+         for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
             ostringstream cText;
             cText << '[' << s_target.Id << ']';
          

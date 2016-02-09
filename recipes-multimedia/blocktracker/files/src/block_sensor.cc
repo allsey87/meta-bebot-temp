@@ -161,6 +161,8 @@ void CBlockSensor::DetectLeds(STag& s_tag, cv::Mat& c_y_frame, cv::Mat& c_u_fram
             fWeightedAverageV += fPixelY * sRegionOfInterest.V.at<uint8_t>(un_row, un_col);
          }
       }
+      
+      //cv::rectangle(c_y_frame, cLedRectangle, cv::Scalar(0, 0, 0));
             
       fWeightedAverageU /= fSumY;
       fWeightedAverageV /= fSumY;

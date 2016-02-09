@@ -2,6 +2,9 @@
 #define BLOCK_DEMO_H
 
 #include <string>
+#include <list>
+
+#include "target.h"
 
 #define NUM_LEDS 12
 
@@ -64,6 +67,10 @@ public:
       struct {
          cv::Mat Y, U, V;
          bool Enable = true;
+         struct {
+            std::list<SBlock> Blocks;
+            std::list<STarget> Targets;
+         } Detections;
       } ImageSensor;
       struct {
          struct {
@@ -102,7 +109,7 @@ public:
       } DifferentialDriveSystem;
       struct {
          std::array<EColor, 12> Color;
-         std::array<bool, 12> UpdateReq;
+         std::array<bool, 12> UpdateReq = {};
       } LEDDeck;
       struct {
          struct {
