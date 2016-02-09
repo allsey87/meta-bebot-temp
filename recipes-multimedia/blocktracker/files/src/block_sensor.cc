@@ -1,17 +1,56 @@
 
 #include "block_sensor.h"
 
-#include "tag.h"
-#include "block.h"
+#include <cstring>
 
 #include <argos3/core/utility/math/matrix/rotationmatrix3.h>
 #include <argos3/core/utility/math/quaternion.h>
 #include <argos3/core/utility/math/angles.h>
 
+#include <apriltag/apriltag.h>
+#include <apriltag/tag36h11.h>
+#include <apriltag/image_u8.h>
+#include <apriltag/zarray.h>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+
+#include "tag.h"
+#include "block.h"
+
 /****************************************/
 /****************************************/
 
-CBlockSensor::CBlockSensor() {}
+CBlockSensor::CBlockSensor() {
+   /* create the tag family */
+   m_psTagFamily = tag36h11_create();
+   m_psTagFamily->black_border = 1;
+   /* create the tag detector */
+   m_psTagDetector = apriltag_detector_create();
+   /* add the tag family to the tag detector */
+   apriltag_detector_add_family(m_psTagDetector, m_psTagFamily);
+   /* configure the tag detector */
+   m_psTagDetector->quad_decimate = 1.0f;
+   m_psTagDetector->quad_sigma = 0.0f;
+   m_psTagDetector->nthreads = 2;
+   m_psTagDetector->debug = 0;
+   m_psTagDetector->refine_edges = 1;
+   m_psTagDetector->refine_decode = 0;
+   m_psTagDetector->refine_pose = 0;
+}
+
+/****************************************/
+/****************************************/
+
+CBlockSensor::~CBlockSensor() {
+   /* remove the tag family to the tag detector */
+   apriltag_detector_remove_family(m_psTagDetector, m_psTagFamily);
+   /* destroy the tag detector */
+   apriltag_detector_destroy(m_psTagDetector);
+   /* destroy the tag family */
+   tag36h11_destroy(m_psTagFamily);
+}
 
 /****************************************/
 /****************************************/
@@ -24,10 +63,18 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
    /* Create a list for the detections */
    std::list<SBlock> lst_detections;
    /* extract tags from frame */
-   std::vector<AprilTags::TagDetection> vecDetections =
-      m_cTagDetector.extractTags(c_frame_y);
-
-   for(const AprilTags::TagDetection& c_detection : vecDetections) {
+   image_u8_t* ptImage = image_u8_create(c_frame_y.cols, c_frame_y.rows);
+   
+   for (unsigned int un_row = 0; un_row < ptImage->height; un_row++) {
+      std::memcpy(&ptImage->buf[un_row * ptImage->stride],
+                  c_frame_y.row(un_row).data,
+                  ptImage->width);
+   }
+   zarray_t* ptDetections = apriltag_detector_detect(m_psTagDetector, ptImage);
+   
+   for(unsigned int un_det_index = 0; un_det_index < zarray_size(ptDetections); un_det_index++) {
+      apriltag_detection_t *ptDetection;
+      zarray_get(ptDetections, un_det_index, &ptDetection);
       /* Create a block for the detection */
       SBlock sBlock;
       /* Add an empty tag to the block and make a reference to it */
@@ -35,14 +82,20 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
       vecBlockTags.emplace_back();
       STag& sTag = vecBlockTags.back();
       /* Copy the corners of the tags into an STag for future use */
-      sTag.Corners.assign(c_detection.p, c_detection.p + 4);
-      sTag.Center = c_detection.cxy;
+      sTag.Corners = {
+         std::pair<float, float>(ptDetection->p[0][0], ptDetection->p[0][1]),
+         std::pair<float, float>(ptDetection->p[1][0], ptDetection->p[1][1]),
+         std::pair<float, float>(ptDetection->p[2][0], ptDetection->p[2][1]),
+         std::pair<float, float>(ptDetection->p[3][0], ptDetection->p[3][1]),
+      };
+      /* Copy the tag center coordinate */
+      sTag.Center = std::pair<float, float>(ptDetection->c[0], ptDetection->c[1]);
       /* Create a vector of OpenCV 2D points representing the tag */
       std::vector<cv::Point2f> vecImagePts = {
-         cv::Point2f(c_detection.p[0].first, c_detection.p[0].second),
-         cv::Point2f(c_detection.p[1].first, c_detection.p[1].second),
-         cv::Point2f(c_detection.p[2].first, c_detection.p[2].second),
-         cv::Point2f(c_detection.p[3].first, c_detection.p[3].second)
+         cv::Point2f(ptDetection->p[0][0], ptDetection->p[0][1]),
+         cv::Point2f(ptDetection->p[1][0], ptDetection->p[1][1]),
+         cv::Point2f(ptDetection->p[2][0], ptDetection->p[2][1]),
+         cv::Point2f(ptDetection->p[3][0], ptDetection->p[3][1]),
       };
       /* OpenCV SolvePnP - detect the translation between the camera 
          plane and the tag plane */
@@ -105,6 +158,11 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
       /* store the block into our block list */
       lst_detections.push_back(sBlock);
    }
+   
+   /* clean up */
+   apriltag_detections_destroy(ptDetections);
+   image_u8_destroy(ptImage);
+   
    /* cluster the blocks */
    ClusterDetections(lst_detections, lst_blocks);
 }

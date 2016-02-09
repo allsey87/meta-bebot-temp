@@ -1,17 +1,24 @@
 #ifndef BLOCK_SENSOR_H
 #define BLOCK_SENSOR_H
 
-#include <apriltags/TagDetector.h>
-#include <apriltags/Tag36h11.h>
 #include <opencv2/core/core.hpp>
 
 #include "block.h"
+
+#include <list>
+
+struct apriltag_family;
+struct apriltag_detector;
 
 class CBlockSensor {
    
 public:
 
+   /* constructor */
    CBlockSensor();
+   
+   /* destructor */
+   ~CBlockSensor();
 
    void DetectBlocks(cv::Mat& c_y_frame,
                      cv::Mat& c_u_frame,
@@ -33,11 +40,11 @@ private:
    void ClusterDetections(std::list<SBlock>& lst_detections,
                           std::list<SBlock>& lst_blocks);
                           
-   /* Initialise select the AprilTag tag family and init the detector */
-   AprilTags::TagCodes m_cTagCodes = AprilTags::TagCodes(AprilTags::tagCodes36h11);
-   AprilTags::TagDetector m_cTagDetector = AprilTags::TagDetector(m_cTagCodes);
-
-   /* April tag (w.r.t. black frame) and block side length in meters */
+   /* Apriltag family and detector */
+   apriltag_family* m_psTagFamily;
+   apriltag_detector* m_psTagDetector;
+   
+   /* Apriltag (w.r.t. black frame) and block side length in meters */
    const float m_fTagSize = 0.024;
    const float m_fBlockSideLength = 0.055;
    const float m_fInterLedLength = 0.040;
@@ -53,7 +60,7 @@ private:
    const float m_fPy = 180.0;
 
    /* Tag to block translation and rotation constants */
-   const cv::Matx31f m_cTagToBlockTranslation = cv::Matx31f(0, 0, -m_fBlockSideLength / 2);
+   const cv::Matx31f m_cTagToBlockTranslation = cv::Matx31f(0, 0, m_fBlockSideLength / 2);
    const cv::Matx31f m_cTagToBlockRotation = cv::Matx31f(0, 0, 0);
 
    /* corner locations of the april tag */

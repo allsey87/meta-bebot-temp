@@ -8,12 +8,10 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 # Find dependencies
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
-find_package(Eigen3 REQUIRED)
-include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(ISSCapture REQUIRED)
 include_directories(${ISSCapture_INCLUDE_DIR})
-find_package(AprilTags REQUIRED)
-include_directories(${AprilTags_INCLUDE_DIR})
+find_package(AprilTag REQUIRED)
+include_directories(${AprilTag_INCLUDE_DIR})
 
 # Temporary include_directories for ARGoS 3 headers
 include_directories("./src/argos3")
@@ -35,7 +33,7 @@ add_executable(blocktracker
 
 set_property(TARGET blocktracker PROPERTY CXX_STANDARD 11)
 
-target_link_libraries(blocktracker ${ISSCapture_LIB} ${AprilTags_LIB} ${OpenCV_LIBS})
+target_link_libraries(blocktracker ${ISSCapture_LIB} ${AprilTag_LIB} ${OpenCV_LIBS})
 install(TARGETS blocktracker DESTINATION bin)
 
 

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <sstream>
 
 #include <error.h>
 #include <signal.h>
@@ -15,10 +16,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <opencv2/core/core.hpp>
-#include <iss_capture.h>
-
 #include <argos3/core/utility/math/angles.h>
+#include <iss_capture.h>
+#include <opencv2/core/core.hpp>
 
 #include "block_demo.h"
 #include "block_tracker.h"
@@ -27,7 +27,6 @@
 #include "leds.h"
 #include "packet_control_interface.h"
 #include "tcp_image_socket.h"
-
 
 #include "manipulator_testing_task.h"
 
@@ -109,7 +108,7 @@ const std::string CBlockDemo::m_strUsage =
 int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {  
    /* Parse command line arguments */
    int c;
-   while ((c = getopt(n_arg_count, ppch_args, "avr:s:")) != -1) {     
+   while ((c = ::getopt(n_arg_count, ppch_args, "avr:s:")) != -1) {     
       switch (c) {
       case 'a':
          m_bAnnotateImages = true;
@@ -587,7 +586,7 @@ void CBlockDemo::Exec() {
       /* Annotate the frame if requested */
       if(m_bAnnotateImages) {
          for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
-            ostringstream cText;
+            std::ostringstream cText;
             cText << '[' << s_target.Id << ']';
          
             CFrameAnnotator::Annotate(m_psSensorData->ImageSensor.Y,
