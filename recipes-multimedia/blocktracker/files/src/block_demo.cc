@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <thread>
+#include <chrono>
 
 #include <error.h>
 #include <signal.h>
@@ -268,7 +270,7 @@ void CBlockDemo::Exec() {
       LAUTO = 0, L100 = 1, L150 = 2, L500 = 3, L900 = 4
    };
 
-   const int8_t pnDriveSystemStop[] = {0, 0};
+   uint8_t pnStopDriveSystemData[] = {0, 0, 0, 0};
 
    unsigned int unTargetId = -1;
    unsigned int unControlTick = -1;
@@ -285,8 +287,8 @@ void CBlockDemo::Exec() {
    
    /* Initialize the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
-                                           reinterpret_cast<const uint8_t*>(pnDriveSystemStop),
-                                           2);
+                                           pnStopDriveSystemData,
+                                           sizeof(pnStopDriveSystemData));
 
 
    std::cerr << "Charging the electromagnet capacitors: ";
@@ -309,7 +311,7 @@ void CBlockDemo::Exec() {
                break;
             }
             else {
-               std::cerr << (punPacketData[0] * 100.0f) / (0x80 * 1.0f) << "% ";
+               std::cerr << static_cast<int>((punPacketData[0] * 100.0f) / (0x80 * 1.0f)) << "% ";
             }
          }
       }
@@ -340,33 +342,71 @@ void CBlockDemo::Exec() {
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
       m_pcISSCaptureDevice->Grab();
    }
-
+   
+   
+   
+   std::chrono::time_point<std::chrono::system_clock> tLastTick, tNow;
+   
    for(;;) {
+      /* regulate the control tick rate to 200ms */
+      for(;;) {
+         tNow = std::chrono::system_clock::now();
+         if(std::chrono::duration<float>(tNow - tLastTick).count() > 0.2f) {
+            tLastTick = tNow;
+            break;
+         }
+      }
+   
       unControlTick++;
       
+      /******** DO IMAGE PROCESSING ********/   
+      std::thread tImageProcessing([this]() {
+         if(m_psSensorData->ImageSensor.Enable) {
+            /* capture a frame  from the camera interface */
+            m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
+                                           m_psSensorData->ImageSensor.U,
+                                           m_psSensorData->ImageSensor.V);                                 
+            /* Reset the list of detected blocks */
+            m_psSensorData->ImageSensor.Detections.Blocks.clear();
+            /* Populate that list with new detections */
+            m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y,
+                                          m_psSensorData->ImageSensor.U,
+                                          m_psSensorData->ImageSensor.V,
+                                          m_psSensorData->ImageSensor.Detections.Blocks);
+            /* Associate detections to a set of targets */
+            m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
+                                                       m_psSensorData->ImageSensor.Detections.Targets);
+         }
+      });
+
       /******** SAMPLE SENSORS ********/
       /* send requests to sample sensors on the manipulator microcontroller */
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
-
-      if(m_psSensorData->ImageSensor.Enable) {
-         /* capture a frame  from the camera interface */
-         m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
-                                        m_psSensorData->ImageSensor.U,
-                                        m_psSensorData->ImageSensor.V);                                 
-      }
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
 
       /* wait for responses from the manipulator interface */
       bool bWaitingForRfResponse = true;
       bool bWaitingForLiftActuatorPositionResponse = true;
       bool bWaitingForLiftActuatorStateResponse = true;
+      bool bWaitingForElectromagnetCharge = true;
       
       do {
          m_pcManipulatorInterface->ProcessInput();
          if(m_pcManipulatorInterface->GetState() == CPacketControlInterface::EState::RECV_COMMAND) {
             const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
             switch(cPacket.GetType()) {
+            case CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE:
+               if(cPacket.GetDataLength() == 1) {
+                  const uint8_t* punPacketData = cPacket.GetDataPointer();                
+                  m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.push_back(punPacketData[0]);
+                  if(m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.size() > 3) {
+                     m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.pop_front();
+                  }
+                  bWaitingForElectromagnetCharge = false;
+               }
+               break;
             case CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE:
                if(cPacket.GetDataLength() == 1) {
                   const uint8_t* punPacketData = cPacket.GetDataPointer();
@@ -377,16 +417,23 @@ void CBlockDemo::Exec() {
                      break;
                   case 1:
                      m_psSensorData->ManipulatorModule.LiftActuator.State =
-                        ELiftActuatorSystemState::ACTIVE;
+                        ELiftActuatorSystemState::ACTIVE_POSITION_CTRL;
                      break;
                   case 2:
                      m_psSensorData->ManipulatorModule.LiftActuator.State =
-                        ELiftActuatorSystemState::CAL_SRCH_BTM;
+                        ELiftActuatorSystemState::ACTIVE_SPEED_CTRL;
                      break;
                   case 3:
                      m_psSensorData->ManipulatorModule.LiftActuator.State =
-                        ELiftActuatorSystemState::CAL_SRCH_TOP;
+                        ELiftActuatorSystemState::CALIBRATION_SRCH_TOP;
                      break;
+                  case 4:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::CALIBRATION_SRCH_BTM;
+                     break;
+                  default:
+                     m_psSensorData->ManipulatorModule.LiftActuator.State =
+                        ELiftActuatorSystemState::UNDEFINED;
                   }
                   bWaitingForLiftActuatorStateResponse = false;
                }
@@ -421,7 +468,8 @@ void CBlockDemo::Exec() {
          }
       } while((bWaitingForRfResponse || 
                bWaitingForLiftActuatorStateResponse || 
-               bWaitingForLiftActuatorPositionResponse) && !bShutdownSignal);
+               bWaitingForLiftActuatorPositionResponse ||
+               bWaitingForElectromagnetCharge) && !bShutdownSignal);
       
       /* Store the system time and the control tick counter */
       m_psSensorData->Clock.Time = GetTime();
@@ -442,23 +490,17 @@ void CBlockDemo::Exec() {
                    << "R(F) = "
                    << m_psSensorData->ManipulatorModule.RangeFinders.Front << ", "
                    << "R(U) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.Underneath << std::endl;
+                   << m_psSensorData->ManipulatorModule.RangeFinders.Underneath << ", " 
+                   << "Chg = ";
+          
+         for(uint8_t un_charge : m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge) {
+            std::cerr << static_cast<int>(un_charge) << " ";
+         }
+         std::cerr << std::endl;
       }
       
-      /******** DO IMAGE PROCESSING ********/   
-      if(m_psSensorData->ImageSensor.Enable) {
-         /* Reset the list of detected blocks */
-         m_psSensorData->ImageSensor.Detections.Blocks.clear();
-         /* Populate that list with new detections */
-         m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y,
-                                       m_psSensorData->ImageSensor.U,
-                                       m_psSensorData->ImageSensor.V,
-                                       m_psSensorData->ImageSensor.Detections.Blocks);
-
-         /* Associate detections to a set of targets */
-         m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
-                                                    m_psSensorData->ImageSensor.Detections.Targets);                          
-      }
+      /* wait for image processing to complete */
+      tImageProcessing.join();
       
       for(unsigned int block_list_idx = 0; block_list_idx < m_psSensorData->ImageSensor.Detections.Blocks.size(); block_list_idx++) {
          std::list<SBlock>::iterator itBlock = std::begin(m_psSensorData->ImageSensor.Detections.Blocks);
@@ -492,14 +534,21 @@ void CBlockDemo::Exec() {
       if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq || 
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq) {
          /* Data for transfer */
-         int8_t pnSpeeds[] = {
-            m_psActuatorData->DifferentialDriveSystem.Left.Velocity,
-            m_psActuatorData->DifferentialDriveSystem.Right.Velocity,
+         /* TODO this should be swapped on the microcontroller */
+         int16_t pnLeftSpeed = -m_psActuatorData->DifferentialDriveSystem.Left.Velocity;
+         int16_t pnRightSpeed = -m_psActuatorData->DifferentialDriveSystem.Right.Velocity;
+         
+         uint8_t punData[] = {
+            reinterpret_cast<const uint8_t*>(&pnLeftSpeed)[1],
+            reinterpret_cast<const uint8_t*>(&pnLeftSpeed)[0],
+            reinterpret_cast<const uint8_t*>(&pnRightSpeed)[1],
+            reinterpret_cast<const uint8_t*>(&pnRightSpeed)[0]
          };
          /* Send data in a packet to the sensor/actuator interface */
          m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
-                                                 reinterpret_cast<const uint8_t*>(pnSpeeds),
-                                                 sizeof(pnSpeeds));
+                                                 punData,
+                                                 sizeof(punData));
+         
          /* clear the update request */
          m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = false;
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = false;
@@ -516,19 +565,19 @@ void CBlockDemo::Exec() {
          if(m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx]) {
             switch(m_psActuatorData->LEDDeck.Color[unLEDIdx]) {
             case EColor::RED:
-               m_vecLEDs.at(unLEDIdx).SetRed(0x30);
+               m_vecLEDs.at(unLEDIdx).SetRed(0x15);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
                m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
                break;
             case EColor::GREEN:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
-               m_vecLEDs.at(unLEDIdx).SetGreen(0x30);
+               m_vecLEDs.at(unLEDIdx).SetGreen(0x15);
                m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
                break;
             case EColor::BLUE:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
-               m_vecLEDs.at(unLEDIdx).SetBlue(0x30);               
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x15);               
                break;
             }
             m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx] = false;
@@ -629,8 +678,8 @@ void CBlockDemo::Exec() {
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, false);
    /* Disable the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
-                                           reinterpret_cast<const uint8_t*>(pnDriveSystemStop),
-                                           2);
+                                           pnStopDriveSystemData,
+                                           sizeof(pnStopDriveSystemData));
    /* Power down the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_ENABLE, false);
 

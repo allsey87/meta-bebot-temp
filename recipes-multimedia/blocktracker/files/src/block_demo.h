@@ -3,6 +3,7 @@
 
 #include <string>
 #include <list>
+#include <deque>
 
 #include "target.h"
 
@@ -53,10 +54,13 @@ public:
       /* Inactive means the stepper motor is disabled */
       INACTIVE = 0,
       /* Active means the stepper motor is running */
-      ACTIVE = 1,
+      ACTIVE_POSITION_CTRL = 1,
+      ACTIVE_SPEED_CTRL = 2,
       /* Calibration search bottom/top */
-      CAL_SRCH_BTM = 2,
-      CAL_SRCH_TOP = 3,
+      CALIBRATION_SRCH_TOP = 3,
+      CALIBRATION_SRCH_BTM = 4,
+      /* Not actually a state */ 
+      UNDEFINED = 5,
    };
    
    enum class EColor {
@@ -82,12 +86,12 @@ public:
                bool Top = false, Bottom = false;
             } LimitSwitches;
             struct {
-               uint8_t Charge = 0;
+               std::deque<uint8_t> Charge;
             } Electromagnets;
             struct {
                uint8_t Position = 0;
             } EndEffector;
-            ELiftActuatorSystemState State = ELiftActuatorSystemState::INACTIVE;
+            ELiftActuatorSystemState State = ELiftActuatorSystemState::UNDEFINED;
          } LiftActuator;
       } ManipulatorModule;
       struct {
@@ -99,7 +103,7 @@ public:
    struct SActuatorData {
       struct {
          struct {
-            int8_t Velocity = 0;
+            int16_t Velocity = 0;
             bool UpdateReq = false;
          } Left, Right;
          struct {
