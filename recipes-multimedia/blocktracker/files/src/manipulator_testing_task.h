@@ -9,6 +9,10 @@
 #define MTT_LIFT_ACTUATOR_MAX_HEIGHT 140
 #define MTT_LIFT_ACTUATOR_OFFSET_HEIGHT 5
 
+#define MTT_LIFT_ACTUATOR_INCREMENT 10
+
+#define BASE_VELOCITY 60
+
 class CManipulatorTestingTask : public CState {
    
 public:
@@ -20,10 +24,6 @@ public:
       CState("top_level_state", nullptr, nullptr, {
          CState("init_end_effector_position", nullptr, nullptr, {
             CState("raise_lift_actuator", [this] {
-               for(CBlockDemo::EColor& e_color : m_psActuatorData->LEDDeck.Color) 
-                  e_color = CBlockDemo::EColor::RED;
-               for(bool& b_update : m_psActuatorData->LEDDeck.UpdateReq)
-                  b_update = true;
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = MTT_LIFT_ACTUATOR_MAX_HEIGHT;
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
             }),
@@ -33,10 +33,14 @@ public:
             CState("set_spot_turn_velocity", [this] {
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
-               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = 60;
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
-               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -60;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+               for(CBlockDemo::EColor& e_color : m_psActuatorData->LEDDeck.Color) 
+                  e_color = CBlockDemo::EColor::RED;
+               for(bool& b_update : m_psActuatorData->LEDDeck.UpdateReq)
+                  b_update = true;
             }),
             CState("wait_for_target"),
          }),
@@ -46,8 +50,8 @@ public:
                /* search for target zero */
                auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                             std::end(m_psSensorData->ImageSensor.Detections.Targets),
-                                            [] (const STarget& s_target) {
-                                               return (s_target.Id == 0);
+                                            [this] (const STarget& s_target) {
+                                               return (s_target.Id == m_unTrackedTargetId);
                                             });
                                          
                if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
@@ -57,52 +61,92 @@ public:
                   std::cerr << "Target: X = " << s_block.Translation.X << ", Z = " << s_block.Translation.Z << std::endl;
                   std::cerr << "Rot(Z, Y, X) = " << s_block.Rotation.Z << ", " << s_block.Rotation.Y << ", " << s_block.Rotation.X << std::endl;
                   
-                  /* copy and saturate s_block.Translation.X into fOffsetFromCenter */                  
-                  float fOffsetFromCenter = std::abs(s_block.Translation.X) > 0.1f ? 0.1f : std::abs(s_block.Translation.X);
-
-                  if(s_block.Translation.X < 0) {
-                     fLeft = 60.0f;
-                     fRight = 350.0f * fOffsetFromCenter + 60.0f;
+                  float fZOffsetA = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z);
+                  float fZOffsetB = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z + M_PI_2);
+                  
+                  std::cerr << "fZOffsetA = " << fZOffsetA << ", fZOffsetB = " << fZOffsetB << std::endl;
+                  
+                  if(std::abs(fZOffsetA) < std::abs(fZOffsetB)) {
+                     fLeft = fZOffsetA * BASE_VELOCITY * 2.5;
+                     fRight = fZOffsetA * BASE_VELOCITY * 2.5;
                   }
                   else {
-                     fLeft = 350.0f * fOffsetFromCenter + 60.0f;
-                     fRight = 60.0f;
+                     fLeft = fZOffsetB * BASE_VELOCITY * 2.5;
+                     fRight = fZOffsetB * BASE_VELOCITY * 2.5;           
                   }
                   
-                  fLeft = 0.0f; fRight = 0.0f;
+                  std::cerr << "top tag center (X, Y) = " << s_block.Tags.front().Center.first << ", " << s_block.Tags.front().Center.second << std::endl;
                   
-                  float fDistanceToTarget = std::hypot(s_block.Translation.X, s_block.Translation.Z);
+                  float fEndEffectorPos = m_psSensorData->ManipulatorModule.LiftActuator.EndEffector.Position;                
+                  fEndEffectorPos += MTT_LIFT_ACTUATOR_INCREMENT * (180.0f - s_block.Tags.front().Center.second) / 180.0f;
+                  uint8_t unEndEffectorPos = 
+                     (fEndEffectorPos > 140.0f) ? 140u : (fEndEffectorPos < 0.0f) ? 0u : static_cast<uint8_t>(fEndEffectorPos);
                   
-                  /* saturate the distance between 0.25, 0.10 */
-                  fDistanceToTarget = (fDistanceToTarget > 0.25) ? 0.25 : (fDistanceToTarget < 0.10) ? 0.10 : fDistanceToTarget;
+                  m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = unEndEffectorPos;
+                  m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
                   
-                  m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = 
-                     (fDistanceToTarget - 0.10) / (0.25 - 0.10) * MTT_LIFT_ACTUATOR_MAX_HEIGHT + (MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 15);
-                  m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;                 
+                  std::cerr << "fEndEffectorPos = " << fEndEffectorPos 
+                            << ", unEndEffectorPosS = " << static_cast<int>(m_psSensorData->ManipulatorModule.LiftActuator.EndEffector.Position) 
+                            << ", unEndEffectorPosA = " << static_cast<int>(unEndEffectorPos) << std::endl;
+
                }
-               else {
-                  /* transition back to spot turn or signal exit? */
-                  std::cerr << "Target Lost" << std::endl;
-                  fLeft = 0.0f;
-                  fRight = 0.0f;
-               }
-               
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = std::round(fLeft);
                m_psActuatorData->DifferentialDriveSystem.Right.Velocity = std::round(fRight);
-               
-               std::cerr << "Output Velocity" << " Left = " << fLeft << ", Right = " << fRight << std::endl;
-               
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
             }),
+            CState("clockwise_spot_turn", [this] {
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY * 0.5;
+               m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -BASE_VELOCITY * 0.5;
+               m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+            }),
+            CState("anticlockwise_spot_turn", [this] {
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY * 0.5;
+               m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = BASE_VELOCITY * 0.5;
+               m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+            }),
+            CState("turn_and_face_target", [this] {
+               auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                            std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                            [this] (const STarget& s_target) {
+                                               return (s_target.Id == m_unTrackedTargetId);
+                                            });
+
+               if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+                  const SBlock& s_block = itTarget->Observations.front();            
+               
+                  if(s_block.Translation.X < 0) {
+                     m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY;
+                     m_psActuatorData->DifferentialDriveSystem.Right.Velocity = BASE_VELOCITY;
+                  }
+                  else {
+                     m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
+                     m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -BASE_VELOCITY;
+                  }
+               }
+               else {
+                  m_psActuatorData->DifferentialDriveSystem.Left.Velocity = 0;
+                  m_psActuatorData->DifferentialDriveSystem.Right.Velocity = 0;
+               }
+               m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+            }),
+            CState("set_approach_velocity", [this] {
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
+               m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = BASE_VELOCITY;
+               m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+            })
          }),
          CState("near_block_approach", nullptr, nullptr, {
             CState("init_near_block_approach", [this] {
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
-               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = 60;
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
-               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = 60;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
                /* computer vision isn't used during the near block approach */
                m_psSensorData->ImageSensor.Enable = false;
@@ -203,9 +247,121 @@ public:
 
       (*this).AddTransition("search_for_target","far_block_approach");
       /* far_block_approach transitions */
-      (*this)["far_block_approach"].AddExitTransition("set_alignment_velocity", [this] {
-         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+      (*this)["far_block_approach"].AddTransition("set_alignment_velocity", "anticlockwise_spot_turn", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Tags.front().Center.first < (0.25f * 640.0f)) {
+               return true;
+            }             
+         }
+         return false;
       });
+      
+      (*this)["far_block_approach"].AddTransition("anticlockwise_spot_turn", "set_alignment_velocity", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Tags.front().Center.first > (0.40f * 640.0f)) {
+               return true;      
+            }             
+         }
+         return false;
+      });
+      
+      (*this)["far_block_approach"].AddTransition("set_alignment_velocity", "clockwise_spot_turn", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Tags.front().Center.first > (0.75f * 640.0f)) {
+               return true;
+            }             
+         }
+         return false;
+      });
+      
+      (*this)["far_block_approach"].AddTransition("clockwise_spot_turn", "set_alignment_velocity", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Tags.front().Center.first < (0.60f * 640.0f)) {
+               return true;
+            }             
+         }
+         return false; /* condition */
+      });
+          
+      (*this)["far_block_approach"].AddTransition("set_alignment_velocity", "turn_and_face_target", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            
+            float fZOffsetA = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z);
+            float fZOffsetB = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z + M_PI_2);
+            
+            if((std::abs(fZOffsetA) < 0.05) || (std::abs(fZOffsetB) < 0.05)) {
+               true;            
+            }
+         }
+         return false;
+      });
+      
+      (*this)["far_block_approach"].AddTransition("turn_and_face_target", "set_approach_velocity", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+                                         
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            /* +/- 10 degrees is acceptable */
+            if(std::abs(s_block.Rotation.Z) < M_PI / 18) {
+               true;
+            }
+         }
+         return false;
+      });
+      
+      (*this)["far_block_approach"].AddExitTransition("set_approach_velocity", [this] {
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });                               
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Translation.Z < 0.18) {
+               return true;
+            }
+         }
+      });
+
 
       (*this).AddTransition("far_block_approach", "near_block_approach");
       /* near_block_approach transitions */
@@ -264,6 +420,8 @@ public:
 private:
    CBlockDemo::SSensorData* m_psSensorData;
    CBlockDemo::SActuatorData* m_psActuatorData;
+   
+   unsigned int m_unTrackedTargetId = 0;
 };
 
 #endif
