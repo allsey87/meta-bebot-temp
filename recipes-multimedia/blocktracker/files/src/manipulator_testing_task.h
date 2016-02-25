@@ -24,7 +24,7 @@ public:
       CState("top_level_state", nullptr, nullptr, {
          CState("init_end_effector_position", nullptr, nullptr, {
             CState("raise_lift_actuator", [this] {
-               m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = MTT_LIFT_ACTUATOR_MAX_HEIGHT;
+               m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = MTT_LIFT_ACTUATOR_MAX_HEIGHT / 2;
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
             }),
             CState("wait_for_lift_actuator"),
@@ -61,33 +61,25 @@ public:
                   std::cerr << "Target: X = " << s_block.Translation.X << ", Z = " << s_block.Translation.Z << std::endl;
                   std::cerr << "Rot(Z, Y, X) = " << s_block.Rotation.Z << ", " << s_block.Rotation.Y << ", " << s_block.Rotation.X << std::endl;
                   
-                  float fZOffsetA = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z);
-                  float fZOffsetB = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z + M_PI_2);
+                  std::cerr << "TTC(X, Y) = " << s_block.Tags.front().Center.first << ", " << s_block.Tags.front().Center.second << std::endl;                  
                   
-                  std::cerr << "fZOffsetA = " << fZOffsetA << ", fZOffsetB = " << fZOffsetB << std::endl;
+                  float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
+
+                  float fTagXOffsetTarget = 0.75f * (std::signbit(fTagXOffset) ? -1.0f : 1.0f);
+
+                  fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
+                  fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
                   
-                  if(std::abs(fZOffsetA) < std::abs(fZOffsetB)) {
-                     fLeft = fZOffsetA * BASE_VELOCITY * 2.5;
-                     fRight = fZOffsetA * BASE_VELOCITY * 2.5;
-                  }
-                  else {
-                     fLeft = fZOffsetB * BASE_VELOCITY * 2.5;
-                     fRight = fZOffsetB * BASE_VELOCITY * 2.5;           
-                  }
-                  
-                  std::cerr << "top tag center (X, Y) = " << s_block.Tags.front().Center.first << ", " << s_block.Tags.front().Center.second << std::endl;
-                  
+                                   
                   float fEndEffectorPos = m_psSensorData->ManipulatorModule.LiftActuator.EndEffector.Position;                
                   fEndEffectorPos += MTT_LIFT_ACTUATOR_INCREMENT * (180.0f - s_block.Tags.front().Center.second) / 180.0f;
                   uint8_t unEndEffectorPos = 
-                     (fEndEffectorPos > 140.0f) ? 140u : (fEndEffectorPos < 0.0f) ? 0u : static_cast<uint8_t>(fEndEffectorPos);
+                     (fEndEffectorPos > 140.0f) ? 140u : (fEndEffectorPos < MTT_LIFT_ACTUATOR_OFFSET_HEIGHT) ? MTT_LIFT_ACTUATOR_OFFSET_HEIGHT : static_cast<uint8_t>(fEndEffectorPos);
                   
                   m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = unEndEffectorPos;
                   m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
                   
-                  std::cerr << "fEndEffectorPos = " << fEndEffectorPos 
-                            << ", unEndEffectorPosS = " << static_cast<int>(m_psSensorData->ManipulatorModule.LiftActuator.EndEffector.Position) 
-                            << ", unEndEffectorPosA = " << static_cast<int>(unEndEffectorPos) << std::endl;
+                  std::cerr << "Vout(L,R) = " << fLeft << ", " << fRight << std::endl;
 
                }
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = std::round(fLeft);
@@ -247,6 +239,7 @@ public:
 
       (*this).AddTransition("search_for_target","far_block_approach");
       /* far_block_approach transitions */
+      /*
       (*this)["far_block_approach"].AddTransition("set_alignment_velocity", "anticlockwise_spot_turn", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
@@ -262,6 +255,7 @@ public:
          }
          return false;
       });
+      */
       
       (*this)["far_block_approach"].AddTransition("anticlockwise_spot_turn", "set_alignment_velocity", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
@@ -279,6 +273,7 @@ public:
          return false;
       });
       
+      /*
       (*this)["far_block_approach"].AddTransition("set_alignment_velocity", "clockwise_spot_turn", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
@@ -294,6 +289,7 @@ public:
          }
          return false;
       });
+      */
       
       (*this)["far_block_approach"].AddTransition("clockwise_spot_turn", "set_alignment_velocity", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
@@ -325,7 +321,7 @@ public:
             float fZOffsetB = s_block.Translation.Z - s_block.Translation.X * tan(s_block.Rotation.Z + M_PI_2);
             
             if((std::abs(fZOffsetA) < 0.05) || (std::abs(fZOffsetB) < 0.05)) {
-               true;            
+               false;            
             }
          }
          return false;
