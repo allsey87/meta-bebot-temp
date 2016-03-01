@@ -369,6 +369,15 @@ void CBlockSensor::ClusterDetections(std::list<SBlock>& lst_detections,
       itTopTagBlock->Translation.Y = fY;
       itTopTagBlock->Translation.Z = fZ;
       
+      /* This is a hack to conserve the other detected tags */
+      for(TCluster::iterator it_block = std::begin(t_cluster);
+         it_block != std::end(t_cluster);
+         it_block++) {
+         if(itTopTagBlock != it_block) {
+            itTopTagBlock->HackTags.push_back(it_block->Tags[0]);
+         }
+      }
+      
       /* Move itTopTagBlock into our list of blocks */
       /* TODO: move the other tags into the block structure */
       lst_blocks.splice(std::begin(lst_blocks), t_cluster, itTopTagBlock);

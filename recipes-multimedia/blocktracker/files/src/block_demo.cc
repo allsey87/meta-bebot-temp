@@ -30,7 +30,7 @@
 #include "packet_control_interface.h"
 #include "tcp_image_socket.h"
 
-#include "manipulator_testing_task.h"
+#include "qualitative_stigmergy_test.h"
 
 /****************************************/
 /****************************************/
@@ -248,7 +248,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
 
    /* Create the block sensor/tracker instances */
    m_pcBlockSensor = new CBlockSensor;
-   m_pcBlockTracker = new CBlockTracker(640u, 360u, 10u, 10u, 0.5f, 50.0f);
+   m_pcBlockTracker = new CBlockTracker(640u, 360u, 10u, 5u, 0.5f, 50.0f);
 
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
@@ -376,15 +376,10 @@ void CBlockDemo::Exec() {
             /* Associate detections to a set of targets */
             m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
                                                        m_psSensorData->ImageSensor.Detections.Targets);
+                                                       
+            //m_pcStructureAnalyser->DetectStructures(m_psSensorData->ImageSensor.Detections.Targets);
          }
       });
-
-      /******** SAMPLE SENSORS ********/
-      /* send requests to sample sensors on the manipulator microcontroller */
-      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
-      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
-      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
-      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
 
       /* wait for responses from the manipulator interface */
       bool bWaitingForRfResponse = true;
@@ -392,7 +387,28 @@ void CBlockDemo::Exec() {
       bool bWaitingForLiftActuatorStateResponse = true;
       bool bWaitingForElectromagnetCharge = true;
       
+      std::chrono::time_point<std::chrono::system_clock> tCmdDispatch; 
+      
+      /******** SAMPLE SENSORS ********/
+      /* send requests to sample sensors on the manipulator microcontroller */
+
       do {
+         if(std::chrono::duration<float>(std::chrono::system_clock::now() - tCmdDispatch).count() > 0.5) {
+            tCmdDispatch = std::chrono::system_clock::now();
+            if(bWaitingForRfResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
+            }
+            if(bWaitingForLiftActuatorPositionResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
+            }
+            if(bWaitingForLiftActuatorStateResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+            }
+            if(bWaitingForElectromagnetCharge) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
+            }
+         }
+      
          m_pcManipulatorInterface->ProcessInput();
          if(m_pcManipulatorInterface->GetState() == CPacketControlInterface::EState::RECV_COMMAND) {
             const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
@@ -501,27 +517,26 @@ void CBlockDemo::Exec() {
       
       /* wait for image processing to complete */
       tImageProcessing.join();
-      
-      for(unsigned int block_list_idx = 0; block_list_idx < m_psSensorData->ImageSensor.Detections.Blocks.size(); block_list_idx++) {
-         std::list<SBlock>::iterator itBlock = std::begin(m_psSensorData->ImageSensor.Detections.Blocks);
-         std::advance(itBlock, block_list_idx);
-      
-         std::cerr << "Block (" << block_list_idx << ")" << std::endl
-                   << "Translation (X, Y, Z): "
-                   << itBlock->Translation.X << ", "
-                   << itBlock->Translation.Y << ", "
-                   << itBlock->Translation.Z << std::endl
-                   << "Rotation (Z, Y, X): "
-                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.Z)).GetValue() << ", "
-                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.Y)).GetValue() << ", "
-                   << argos::ToDegrees(argos::CRadians(itBlock->Rotation.X)).GetValue() << std::endl
-                   << "Detected LEDs: ";
+       
+      /*
+      for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
+         std::cerr << "Target #" << s_target.Id << ":" << std::endl
+                   << "T(X, Y, Z): "
+                   << s_target.Observations.front().Translation.X << ", "
+                   << s_target.Observations.front().Translation.Y << ", "
+                   << s_target.Observations.front().Translation.Z << std::endl
+                   << "R(Z, Y, X): "
+                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.Z)).GetValue() << ", "
+                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.Y)).GetValue() << ", "
+                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.X)).GetValue() << std::endl
+                   << "LEDs: ";
                    
-         for(ELedState e_led_state : itBlock->Tags[0].DetectedLeds) {
+         for(ELedState e_led_state : s_target.Observations.front().Tags.front().DetectedLeds) {
             std::cerr << e_led_state << " ";
          }
          std::cerr << std::endl;
       }
+      */
       
       /******** STEP THE TASK ********/
       bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();

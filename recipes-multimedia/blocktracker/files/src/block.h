@@ -17,6 +17,8 @@ struct SBlock {
    struct {
       float Z = 0.0f, Y = 0.0f, X = 0.0f;
    } Rotation;
+   /* Hack - remove me */
+   std::vector<STag> HackTags;
 };
 
 #endif
