@@ -345,7 +345,9 @@ void CBlockDemo::Exec() {
    
    
    
-   std::chrono::time_point<std::chrono::system_clock> tLastTick, tNow;
+   std::chrono::time_point<std::chrono::system_clock> tExperimentStart, tLastTick, tNow;
+   
+   tExperimentStart = std::chrono::system_clock::now();
    
    for(;;) {
       /* regulate the control tick rate to 200ms */
@@ -682,6 +684,10 @@ void CBlockDemo::Exec() {
          break;
       }
    }
+   
+   std::cerr << "Shutdown: experiment run time was " 
+             << std::chrono::duration<float>(std::chrono::system_clock::now() - tExperimentStart).count() 
+             << " seconds" << std::endl;
 
    /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */

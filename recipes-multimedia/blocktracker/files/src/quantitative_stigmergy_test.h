@@ -346,7 +346,7 @@ public:
             }),
             CState("wait_for_target"),
          }),
-         CState("search_for_structure", nullptr, nullptr, {
+         CState("search_for_structures", nullptr, nullptr, {
             CState("set_search_velocity", [this] {
                m_psSensorData->ImageSensor.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
@@ -360,6 +360,7 @@ public:
                for(bool& b_update : m_psActuatorData->LEDDeck.UpdateReq)
                   b_update = true;
             }),
+            CState("wait_for_zero_targets"),
             CState("wait_for_next_target"),
             CState("turn_towards_target", [this] {
                auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
@@ -383,28 +384,23 @@ public:
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
             }),
-            CState("reverse_until_distance", [this] {
-               auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
-                                            std::end(m_psSensorData->ImageSensor.Detections.Targets),
-                                            [this] (const STarget& s_target) {
-                                               return (s_target.Id == m_unTrackedTargetId);
-                                            });
-               if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
-                  const SBlock& s_block = itTarget->Observations.front();            
-                  TrackBlockViaManipulatorHeight(s_block, MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 2u);
-                  float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
-                  if(fTagXOffset < 0) {
-                     m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY * (1.0f + std::abs(fTagXOffset));
-                     m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -BASE_VELOCITY;
-                  }
-                  else {
-                     m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY;
-                     m_psActuatorData->DifferentialDriveSystem.Right.Velocity = -BASE_VELOCITY * (1.0f + std::abs(fTagXOffset));
-                  }
-               }
+         }),
+         CState("search_for_previous_structure", nullptr, nullptr, {
+            CState("set_search_velocity", [this] {
+               m_psSensorData->ImageSensor.Enable = true;
+               m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
+               m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
+               m_psActuatorData->DifferentialDriveSystem.Right.Velocity = BASE_VELOCITY;
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
+               for(CBlockDemo::EColor& e_color : m_psActuatorData->LEDDeck.Color) 
+                  e_color = CBlockDemo::EColor::RED;
+               for(bool& b_update : m_psActuatorData->LEDDeck.UpdateReq)
+                  b_update = true;
             }),
+            CState("wait_for_zero_targets"),
+            CState("wait_for_next_target"),
          }),
          CState("far_structure_approach", nullptr, nullptr, {
             CState("turn_towards_target", [this] {
@@ -588,7 +584,7 @@ public:
       });
 
       (*this).AddTransition("init_end_effector_position", "search_for_unused_block");
-      //(*this).AddTransition("init_end_effector_position", "search_for_structure");
+      //(*this).AddTransition("init_end_effector_position", "search_for_structures");
       
       /* search_for_target transitions */
       (*this)["search_for_unused_block"].AddTransition("set_search_velocity","wait_for_next_target");
@@ -987,7 +983,7 @@ public:
          return (m_unTrackedTargetId == -1);
       });
       
-      (*this).AddTransition("pick_up_block", "search_for_structure", [this] {
+      (*this).AddTransition("pick_up_block", "search_for_structures", [this] {
          return (m_unTrackedTargetId != -1);
       });
       
@@ -1016,164 +1012,98 @@ public:
                                                                                                     
       *************************************************************************************************************************/
       
-      (*this)["search_for_structure"].AddTransition("set_search_velocity","wait_for_next_target");
-      (*this)["search_for_structure"].AddTransition("wait_for_next_target", "turn_towards_target", [this] {
-          std::list<STarget>::iterator itTrackedTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
-                                                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
-                                                                      [this] (const STarget& s_target) {
-                                                                         return (s_target.Id != m_unTrackedTargetId);
-                                                                      });
-         
-         if(itTrackedTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
-            m_unTrackedTargetId = itTrackedTarget->Id;
+      (*this)["search_for_structures"].AddTransition("set_search_velocity","wait_for_zero_targets");
+      
+      (*this)["search_for_structures"].AddTransition("wait_for_zero_targets","wait_for_next_target", [this] {
+         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+      });
+      
+      (*this)["search_for_structures"].AddTransition("wait_for_next_target", "turn_towards_target", [this] {
+         if(m_psSensorData->ImageSensor.Detections.Targets.size() != 0) {
+            m_unTrackedTargetId = m_psSensorData->ImageSensor.Detections.Targets.front().Id;
             std::cerr << "Tracking target = " << m_unTrackedTargetId << std::endl;
             return true;
-         }
+         }         
          return false;
       });
       
 
-      (*this)["search_for_structure"].AddTransition("turn_towards_target", "reverse_until_distance", [this] {
+      (*this)["search_for_structures"].AddTransition("turn_towards_target", "set_search_velocity", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                       [this] (const STarget& s_target) {
                                          return (s_target.Id == m_unTrackedTargetId);
                                       });
-                                         
          if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
             const SBlock& s_block = itTarget->Observations.front();
-            
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
-               s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
+               s_block.Tags.front().Center.first < (0.525f * 640.0f) && 
+               m_unNumTargetsInStructA == 0) {
+               m_unNumTargetsInStructA = m_psSensorData->ImageSensor.Detections.Targets.size();
+               std::cerr << "Structure A has " << m_unNumTargetsInStructA << " targets" << std::endl;
                return true;
-            }                
-         }
-         else {
-            std::cerr << "turn_towards_target: lost target " << m_unTrackedTargetId << std::endl;
+            }
          }
          return false;
       });
       
-      (*this)["search_for_structure"].AddTransition("turn_towards_target", "set_search_velocity", [this] {
+      (*this)["search_for_structures"].AddExitTransition("turn_towards_target", [this] {
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                       [this] (const STarget& s_target) {
                                          return (s_target.Id == m_unTrackedTargetId);
                                       });
-         if(itTarget == std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
-            std::cerr << "turn_towards_target: lost target " << m_unTrackedTargetId << std::endl;
-            m_unTrackedTargetId = -1;
-            return true;
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();            
+            if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
+               s_block.Tags.front().Center.first < (0.525f * 640.0f) && 
+               m_unNumTargetsInStructA != 0) {
+               m_unNumTargetsInStructB = m_psSensorData->ImageSensor.Detections.Targets.size();
+               std::cerr << "Structure B has " << m_unNumTargetsInStructB << " targets" << std::endl;
+               return true;
+            }
          }
          return false;
       });
          
       /**********************************************************************************************************/
       
-      (*this)["search_for_structure"].AddTransition("reverse_until_distance", "set_search_velocity", [this] {
-         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
-                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
-                                      [this] (const STarget& s_target) {
-                                         return (s_target.Id == m_unTrackedTargetId);
-                                      });
-         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
-            const SBlock& s_block = itTarget->Observations.front();
-            if(s_block.Translation.Z > TARGET_Z_DIST_REVERSE_TO) {
-               bool bBlockBelongsToStructure = false;
-               for(const STarget& s_target_other : m_psSensorData->ImageSensor.Detections.Targets) {
-                  if(s_target_other.Id == itTarget->Id) {
-                     /* don't compare target with itself */
-                     continue;
-                  }
-                  else {
-                     const SBlock& s_block_other = s_target_other.Observations.front();
-                     float fNeighborBlockDist = sqrt(pow(s_block.Translation.X - s_block_other.Translation.X, 2) +
-                                                     pow(s_block.Translation.Y - s_block_other.Translation.Y, 2) +
-                                                     pow(s_block.Translation.Z - s_block_other.Translation.Z, 2));
-                     
-                     if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
-                        bBlockBelongsToStructure = true;
-                        float fTrackedTargetDist = sqrt(pow(s_block.Translation.X, 2) +
-                                                        pow(s_block.Translation.Y, 2) +
-                                                        pow(s_block.Translation.Z, 2));
-                        float fOtherTargetDist = sqrt(pow(s_block_other.Translation.X, 2) +
-                                                      pow(s_block_other.Translation.Y, 2) +
-                                                      pow(s_block_other.Translation.Z, 2));
-                        if(fTrackedTargetDist > fOtherTargetDist) {
-                           std::cerr << "reverse_until_distance: swapping target from " << m_unTrackedTargetId  << " to " << s_target_other.Id << std::endl;
-                           m_unTrackedTargetId = s_target_other.Id;
-                        }
-                     }
-                  }
-               }
-               /* if this block appears to belong to a structure, don't transition */
-               return !bBlockBelongsToStructure;
-            }
-            else {
-               /* s_block.Translation.Z <= TARGET_Z_DIST_REVERSE_TO */
-               return false;
-            }
-         }
-         else {
-            std::cerr << "reverse_until_distance: lost target " << m_unTrackedTargetId  <<  std::endl;
-            return true;
-         }
-         /* s_block.Translation.Z > TARGET_Z_DIST_REVERSE_TO and we couldn't find any other blocks with in MTT_BLOCK_SEP_THRESHOLD of the target */
-         /* assume it isn't part of a structure */
-         return true;
+      (*this).AddTransition("search_for_structures", "far_structure_approach", [this] {
+         return (m_unNumTargetsInStructA <= m_unNumTargetsInStructB);
       });
-     
-      (*this)["search_for_structure"].AddExitTransition("reverse_until_distance", [this] {
-         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
-                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
-                                      [this] (const STarget& s_target) {
-                                         return (s_target.Id == m_unTrackedTargetId);
-                                      });
       
-         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {           
-            const SBlock& s_block = itTarget->Observations.front();
-            if(s_block.Translation.Z > TARGET_Z_DIST_REVERSE_TO) {
-               bool bBlockBelongsToStructure = false;
-               for(const STarget& s_target_other : m_psSensorData->ImageSensor.Detections.Targets) {
-                  if(s_target_other.Id == itTarget->Id) {
-                     /* don't compare target with itself */
-                     continue;
-                  }
-                  else {
-                     const SBlock& s_block_other = s_target_other.Observations.front();
-                     float fNeighborBlockDist = sqrt(pow(s_block.Translation.X - s_block_other.Translation.X, 2) +
-                                                     pow(s_block.Translation.Y - s_block_other.Translation.Y, 2) +
-                                                     pow(s_block.Translation.Z - s_block_other.Translation.Z, 2));
-                     
-                     if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
-                        bBlockBelongsToStructure = true;
-                        float fTrackedTargetDist = sqrt(pow(s_block.Translation.X, 2) +
-                                                        pow(s_block.Translation.Y, 2) +
-                                                        pow(s_block.Translation.Z, 2));
-                        float fOtherTargetDist = sqrt(pow(s_block_other.Translation.X, 2) +
-                                                      pow(s_block_other.Translation.Y, 2) +
-                                                      pow(s_block_other.Translation.Z, 2));
-                        if(fTrackedTargetDist > fOtherTargetDist) {
-                           std::cerr << "reverse_until_distance: swapping target from " << m_unTrackedTargetId  << " to " << s_target_other.Id << std::endl;
-                           m_unTrackedTargetId = s_target_other.Id;
-                        }
-                     }
-                  }
-               }
-               /* return if we have found a structure */
-               return bBlockBelongsToStructure;
-            }
-         }
-         /* we couldn't find any other blocks with in MTT_BLOCK_SEP_THRESHOLD of the target */
-         /* assume it isn't part of a structure */
+      (*this).AddTransition("search_for_structures", "search_for_previous_structure", [this] {
+         return (m_unNumTargetsInStructA > m_unNumTargetsInStructB);
+      });
+      
+      (*this)["search_for_previous_structure"].AddTransition("set_search_velocity", "wait_for_zero_targets");
+      
+      
+      (*this)["search_for_previous_structure"].AddTransition("wait_for_zero_targets","wait_for_next_target", [this] {
+         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+      });
+      
+      (*this)["search_for_previous_structure"].AddExitTransition("wait_for_next_target", [this] {
+         if(m_psSensorData->ImageSensor.Detections.Targets.size() != 0) {
+            m_unTrackedTargetId = m_psSensorData->ImageSensor.Detections.Targets.front().Id;
+            std::cerr << "Tracking target = " << m_unTrackedTargetId << std::endl;
+            return true;
+         }         
          return false;
       });
       
       /**********************************************************************************************************/
-     
-      (*this).AddTransition("search_for_structure", "far_structure_approach");
+      
+      (*this).AddTransition("search_for_previous_structure", "far_structure_approach");      
       
       (*this)["far_structure_approach"].AddTransition("turn_towards_target", "approach_block_straight", [this] {
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }     
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                       [this] (const STarget& s_target) {
@@ -1194,6 +1124,13 @@ public:
       });
 
       (*this)["far_structure_approach"].AddTransition("turn_towards_target", "approach_block_right", [this] {
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                       [this] (const STarget& s_target) {
@@ -1214,6 +1151,13 @@ public:
       });
       
       (*this)["far_structure_approach"].AddTransition("turn_towards_target", "approach_block_left", [this] {
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }
          auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                       [this] (const STarget& s_target) {
@@ -1234,17 +1178,85 @@ public:
       });
       
       (*this)["far_structure_approach"].AddExitTransition("approach_block_right", [this] {
-         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }     
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Translation.Z < 0.08) {
+               return true;
+            }
+         }
+         else {
+            /* lost tracking, drop the payload */
+            return true;
+         }
+         return false;
       });
       
       (*this)["far_structure_approach"].AddExitTransition("approach_block_left", [this] {
-         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }     
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Translation.Z < 0.08) {
+               return true;
+            }
+         }
+         else {
+            /* lost tracking, drop the payload */
+            return true;
+         }
+         return false;
       });
 
       (*this)["far_structure_approach"].AddExitTransition("approach_block_straight", [this] {
-         return (m_psSensorData->ImageSensor.Detections.Targets.size() == 0);
+         auto itTargetFurthestToTheRight = FindTargetFurthestToTheRight(m_psSensorData->ImageSensor.Detections.Targets);
+         if(itTargetFurthestToTheRight != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            if(m_unTrackedTargetId != itTargetFurthestToTheRight->Id) {
+               std::cerr << "swapping target from " << m_unTrackedTargetId << " to " << itTargetFurthestToTheRight->Id << " because OpenCV is rubbish" << std::endl;
+               m_unTrackedTargetId = itTargetFurthestToTheRight->Id;
+            }
+         }     
+         auto itTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
+                                      [this] (const STarget& s_target) {
+                                         return (s_target.Id == m_unTrackedTargetId);
+                                      });
+         if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            if(s_block.Translation.Z < 0.08) {
+               return true;
+            }
+         }
+         else {
+            /* lost tracking, drop the payload */
+            return true;
+         }
+         return false;
       });
 
+
+      (*this).AddTransition("far_structure_approach", "near_structure_approach");
       
       (*this)["near_structure_approach"].AddTransition("set_manipulator_height", "wait_for_manipulator");
       
@@ -1255,13 +1267,13 @@ public:
       (*this)["near_structure_approach"].AddTransition("set_approach_velocity", "wait_until_approach_timer_expired");
       
       (*this)["near_structure_approach"].AddTransition("wait_until_approach_timer_expired", "set_reverse_velocity", [this] {
-         return (m_psSensorData->Clock.Time - m_fNearApproachStartTime > 10.0f);
+         return (m_psSensorData->Clock.Time - m_fNearApproachStartTime > 0.5f);
       });
       
       (*this)["near_structure_approach"].AddTransition("set_reverse_velocity", "wait_until_reverse_timer_expired");
       
       (*this)["near_structure_approach"].AddTransition("wait_until_reverse_timer_expired", "set_zero_velocity", [this] {
-         return (m_psSensorData->Clock.Time - m_fNearApproachStartTime > 2.0f);
+         return (m_psSensorData->Clock.Time - m_fNearApproachStartTime > 1.0f);
       });
 
       (*this)["near_structure_approach"].AddExitTransition("set_zero_velocity");
@@ -1287,7 +1299,7 @@ public:
       (*this)["reverse"].AddTransition("set_reverse_velocity", "wait_until_reverse_timer_expired");
       
       (*this)["reverse"].AddExitTransition("wait_until_reverse_timer_expired", [this] {
-         return (m_psSensorData->Clock.Time - m_fReverseStartTime > 15.0f);
+         return (m_psSensorData->Clock.Time - m_fReverseStartTime > 10.0f);
       });
 
       
@@ -1334,6 +1346,32 @@ private:
       return itTargetWithMostQ4Leds;
    }
    
+   std::list<STarget>::const_iterator FindTargetFurthestToTheLeft(const std::list<STarget>& s_target_list) {
+      std::list<STarget>::const_iterator itTargetFurthestToTheLeft = std::begin(s_target_list);
+      for(std::list<STarget>::const_iterator it_target = std::begin(s_target_list);
+         it_target != std::end(s_target_list);
+         it_target++) {
+         if(it_target->Observations.front().Translation.X < 
+            itTargetFurthestToTheLeft->Observations.front().Translation.X) {
+            itTargetFurthestToTheLeft = it_target;
+         }
+      }
+      return itTargetFurthestToTheLeft;
+   }
+   
+   std::list<STarget>::const_iterator FindTargetFurthestToTheRight(const std::list<STarget>& s_target_list) {
+      std::list<STarget>::const_iterator itTargetFurthestToTheRight = std::begin(s_target_list);
+      for(std::list<STarget>::const_iterator it_target = std::begin(s_target_list);
+         it_target != std::end(s_target_list);
+         it_target++) {
+         if(it_target->Observations.front().Translation.X > 
+            itTargetFurthestToTheRight->Observations.front().Translation.X) {
+            itTargetFurthestToTheRight = it_target;
+         }
+      }
+      return itTargetFurthestToTheRight;
+   }
+   
    unsigned int m_unTrackedTargetId = -1;
    
    enum class EApproachDirection {
@@ -1341,6 +1379,10 @@ private:
    } m_eApproachDirection;
    
    double m_fNearApproachStartTime, m_fReverseStartTime;
+   
+   unsigned int m_unNumTargetsInStructA = 0;
+   unsigned int m_unNumTargetsInStructB = 0;
+   
 };
 
 #endif
