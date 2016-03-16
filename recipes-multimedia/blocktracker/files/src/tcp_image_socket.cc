@@ -56,7 +56,7 @@ bool CTCPImageSocket::IsConnected() {
    return (sock >= 0);
 }
 
-int CTCPImageSocket::Write(uint8_t* pun_data, unsigned int un_width, unsigned int un_height) {
+int CTCPImageSocket::Write(uint8_t* pun_data, unsigned int un_width, unsigned int un_height, unsigned int un_stride) {
    int64_t magic = MAGIC;
 
    int64_t utime = GetTime();
@@ -77,7 +77,11 @@ int CTCPImageSocket::Write(uint8_t* pun_data, unsigned int un_width, unsigned in
    Write32(ptr, formatlen);                ptr += 4;
    memcpy(ptr, format, formatlen);         ptr += formatlen;
    Write32(ptr, unImageLength);            ptr += 4;
-   memcpy(ptr, pun_data, unImageLength);   ptr += unImageLength;
+
+   for(unsigned int un_row = 0; un_row < un_height; un_row++) {
+      memcpy(ptr, pun_data + un_row * un_stride, un_width);   
+      ptr += un_width;
+   }
 
    int bytes = send(sock, buf, buflen, 0);
 

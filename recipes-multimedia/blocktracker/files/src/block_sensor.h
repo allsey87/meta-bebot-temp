@@ -2,6 +2,7 @@
 #define BLOCK_SENSOR_H
 
 #include <opencv2/core/core.hpp>
+#include <apriltag/image_u8.h>
 
 #include "block.h"
 
@@ -20,9 +21,9 @@ public:
    /* destructor */
    ~CBlockSensor();
 
-   void DetectBlocks(cv::Mat& c_y_frame,
-                     cv::Mat& c_u_frame,
-                     cv::Mat& c_v_frame,
+   void DetectBlocks(image_u8_t* pt_y_frame,
+                     image_u8_t* pt_u_frame,
+                     image_u8_t* pt_v_frame,
                      std::list<SBlock>& lst_blocks);
 
    const cv::Matx33f& GetCameraMatrix() {
@@ -35,7 +36,7 @@ public:
 
 private:
 
-   void DetectLeds(STag& s_tag, cv::Mat& c_y_frame, cv::Mat& c_u_frame, cv::Mat& c_v_frame);
+   void DetectLeds(STag& s_tag, image_u8_t* pt_y_frame, image_u8_t* pt_u_frame, image_u8_t* pt_v_frame);
 
    void ClusterDetections(std::list<SBlock>& lst_detections,
                           std::list<SBlock>& lst_blocks);

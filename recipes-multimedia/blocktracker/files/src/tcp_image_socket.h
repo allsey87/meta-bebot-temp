@@ -13,7 +13,7 @@ public:
 	
 	bool IsConnected();
 
-	int Write(uint8_t* pun_data, unsigned int un_width, unsigned int un_height);
+	int Write(uint8_t* pun_data, unsigned int un_width, unsigned int un_height, unsigned int un_stride = 0);
 
 private:
 	int sock;

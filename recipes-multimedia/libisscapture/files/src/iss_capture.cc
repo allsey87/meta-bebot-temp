@@ -17,8 +17,6 @@
 
 #include <fstream>
 
-#include "opencv2/opencv.hpp"
-
 const CISSCaptureDevice::OvVideoMode CISSCaptureDevice::OV_MODE_640_480_30 =
    { 640, 480, 30, 0 };
 const CISSCaptureDevice::OvVideoMode CISSCaptureDevice::OV_MODE_320_240_30 =
@@ -101,52 +99,29 @@ bool CISSCaptureDevice::Grab() {
    return true;
 }
 
-bool CISSCaptureDevice::WriteFrameToDisk(std::string s_path_to_file) {
-   std::ofstream cOutputFile(s_path_to_file.c_str());
-   if(cOutputFile.good()) {
-      cOutputFile.write(reinterpret_cast<const char*>(buffer_),
-                        mode_.height * mode_.width * 2);
-      return true;
-   }
-   else {
-      return false;
-   }
-}
-
-bool CISSCaptureDevice::GetFrame(cv::Mat& c_y_channel, cv::Mat& c_u_channel, cv::Mat& c_v_channel) {
+bool CISSCaptureDevice::GetFrame(image_u8_t* pt_y_channel, image_u8_t* pt_u_channel, image_u8_t* pt_v_channel) {
    if (!Grab()) {
       return false;
-   }	
-   
-   c_y_channel.create(mode_.height / m_unScale,
-                      mode_.width / m_unScale,
-                      CV_8UC1);
-
-   c_u_channel.create(mode_.height / m_unScale,
-                      mode_.width / m_unScale,
-                      CV_8UC1);
-
-   c_v_channel.create(mode_.height / m_unScale,
-                      mode_.width / m_unScale,
-                      CV_8UC1); 
-   
+   }
+ 
    for (unsigned int unHeightIdx = 0; unHeightIdx < mode_.height; unHeightIdx++) {
       for (int unWidthIdx = 0; unWidthIdx < mode_.width; unWidthIdx++) {
-         /* i and j are the horizontal and vertical indices into the image, ingnoring format and scaling */
+         // i and j are the horizontal and vertical indices into the image, ingnoring format and scaling 
          
          if((unHeightIdx % m_unScale == 0) && (unWidthIdx % m_unScale == 0)) {
             unsigned int unPixelOffset = unHeightIdx * (mode_.width * 2) + (unWidthIdx * 2);
-            unsigned int unDestIdx = (unHeightIdx / m_unScale) * (mode_.width / m_unScale) + (unWidthIdx / m_unScale);
+            unsigned int unDestIdx = (unHeightIdx / m_unScale) * (pt_y_channel->stride) + (unWidthIdx / m_unScale);
 
             SPixelData* psPixelData = reinterpret_cast<SPixelData*>(buffer_ + unPixelOffset);
             
-            c_u_channel.data[unDestIdx] = psPixelData->U0;
-            c_y_channel.data[unDestIdx] = psPixelData->Y0;
-            c_v_channel.data[unDestIdx] = psPixelData->V0;
-
+            /* split into seperate planes */
+            pt_u_channel->buf[unDestIdx] = psPixelData->U0;
+            pt_y_channel->buf[unDestIdx] = psPixelData->Y0;
+            pt_v_channel->buf[unDestIdx] = psPixelData->V0;
          }
       }
    }
+
    return true;
 }
 

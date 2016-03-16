@@ -30,7 +30,8 @@
 #include "packet_control_interface.h"
 #include "tcp_image_socket.h"
 
-#include "qualitative_stigmergy_test.h"
+//#include "qualitative_stigmergy_test.h"
+#include "quantitative_stigmergy_test.h"
 
 /****************************************/
 /****************************************/
@@ -67,20 +68,6 @@ double GetTime() {
    struct timeval sT;
    ::gettimeofday(&sT, NULL);
    return (static_cast<double>(sT.tv_sec) + static_cast<double>(sT.tv_usec)/1000000.);
-}
-
-/****************************************/
-/****************************************/
-
-CTCPImageSocket& operator<<(CTCPImageSocket& m_cTCPImageSocket, const cv::Mat& m_cImage) {
-   if(m_cImage.type() == CV_8UC1) {
-      m_cTCPImageSocket.Write(m_cImage.data, m_cImage.size().width, m_cImage.size().height);
-   } else {
-      std::cerr << "Error" << std::endl
-                << "CTCPImageSocket requires a grayscale image" << std::endl;
-      bShutdownSignal = true;
-   }
-   return m_cTCPImageSocket;
 }
 
 /****************************************/
@@ -253,7 +240,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
    m_psActuatorData = new SActuatorData;
-
+  
    /* Create the task */
    m_pcManipulatorTestingTask = new CManipulatorTestingTask(m_psSensorData, m_psActuatorData);
 
@@ -365,15 +352,15 @@ void CBlockDemo::Exec() {
       std::thread tImageProcessing([this]() {
          if(m_psSensorData->ImageSensor.Enable) {
             /* capture a frame  from the camera interface */
-            m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Y,
-                                           m_psSensorData->ImageSensor.U,
-                                           m_psSensorData->ImageSensor.V);                                 
+            m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Buffers[0].Y,
+                                           m_psSensorData->ImageSensor.Buffers[0].U,
+                                           m_psSensorData->ImageSensor.Buffers[0].V);                                 
             /* Reset the list of detected blocks */
             m_psSensorData->ImageSensor.Detections.Blocks.clear();
             /* Populate that list with new detections */
-            m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Y,
-                                          m_psSensorData->ImageSensor.U,
-                                          m_psSensorData->ImageSensor.V,
+            m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Buffers[0].Y,
+                                          m_psSensorData->ImageSensor.Buffers[0].U,
+                                          m_psSensorData->ImageSensor.Buffers[0].V,
                                           m_psSensorData->ImageSensor.Detections.Blocks);
             /* Associate detections to a set of targets */
             m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
@@ -654,28 +641,41 @@ void CBlockDemo::Exec() {
          for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
             std::ostringstream cText;
             cText << '[' << s_target.Id << ']';
-         
-            CFrameAnnotator::Annotate(m_psSensorData->ImageSensor.Y,
+            /* create opencv header for the frame to work with the data */
+            cv::Mat cFrameToAnnotate(m_psSensorData->ImageSensor.Buffers[0].Y->height,
+                                     m_psSensorData->ImageSensor.Buffers[0].Y->width,
+                                     CV_8UC1,
+                                     m_psSensorData->ImageSensor.Buffers[0].Y->buf,
+                                     m_psSensorData->ImageSensor.Buffers[0].Y->stride);
+            /* annotate the frame */
+            CFrameAnnotator::Annotate(cFrameToAnnotate,
                                       s_target,
                                       m_pcBlockSensor->GetCameraMatrix(),
                                       m_pcBlockSensor->GetDistortionParameters(),
                                       cText.str());
          }
       }
+      
 
       /* save frame to disk if a path was given */
       if(!m_strImageSavePath.empty()) {
          std::ostringstream cStream;
          cStream << m_strImageSavePath << "_" << std::setfill('0') << std::setw(5) << unControlTick << ".y";
          std::ofstream cFrameOutputY(cStream.str().c_str());
-         cFrameOutputY.write(reinterpret_cast<char*>(m_psSensorData->ImageSensor.Y.data),
-                             m_psSensorData->ImageSensor.Y.rows *
-                             m_psSensorData->ImageSensor.Y.cols);
+         /* take a pointer to the Y channel */
+         image_u8_t* ptImage = m_psSensorData->ImageSensor.Buffers[0].Y;
+         for(unsigned int un_row = 0; un_row < ptImage->height; un_row++) {
+            /* take a pointer to the image row */
+            uint8_t* pun_row = ptImage->buf + (un_row * ptImage->stride);
+            /* write it to the output file */
+            cFrameOutputY.write(reinterpret_cast<char*>(pun_row), ptImage->width);
+         }
       }
       
       /* stream frame to host if connected */
       if(m_pcTCPImageSocket != nullptr && m_psSensorData->ImageSensor.Enable) {
-         *m_pcTCPImageSocket << m_psSensorData->ImageSensor.Y;
+         image_u8_t* pt_image = m_psSensorData->ImageSensor.Buffers[0].Y;
+         m_pcTCPImageSocket->Write(pt_image->buf, pt_image->width, pt_image->height, pt_image->stride);
       }
 
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */

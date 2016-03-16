@@ -55,22 +55,16 @@ CBlockSensor::~CBlockSensor() {
 /****************************************/
 /****************************************/
 
-void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
-                                cv::Mat& c_frame_u,
-                                cv::Mat& c_frame_v,
+
+void CBlockSensor::DetectBlocks(image_u8_t* pt_image_y,
+                                image_u8_t* pt_image_u,
+                                image_u8_t* pt_image_v,
                                 std::list<SBlock>& lst_blocks) {
 
    /* Create a list for the detections */
    std::list<SBlock> lst_detections;
-   /* extract tags from frame */
-   image_u8_t* ptImage = image_u8_create(c_frame_y.cols, c_frame_y.rows);
-   
-   for (unsigned int un_row = 0; un_row < ptImage->height; un_row++) {
-      std::memcpy(&ptImage->buf[un_row * ptImage->stride],
-                  c_frame_y.row(un_row).data,
-                  ptImage->width);
-   }
-   zarray_t* ptDetections = apriltag_detector_detect(m_psTagDetector, ptImage);
+
+   zarray_t* ptDetections = apriltag_detector_detect(m_psTagDetector, pt_image_y);
    
    for(unsigned int un_det_index = 0; un_det_index < zarray_size(ptDetections); un_det_index++) {
       apriltag_detection_t *ptDetection;
@@ -107,7 +101,7 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
                    sTag.TranslationVector);
 
       /* Detect the LEDs surrounding the tag */
-      DetectLeds(sTag, c_frame_y, c_frame_u, c_frame_v);
+      DetectLeds(sTag, pt_image_y, pt_image_u, pt_image_v);
    
       /* Compose the tag-to-block and camera-to-tag transformations to get
          the camera-to-block transformation, storing the result directly 
@@ -161,7 +155,6 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
    
    /* clean up */
    apriltag_detections_destroy(ptDetections);
-   image_u8_destroy(ptImage);
    
    /* cluster the blocks */
    ClusterDetections(lst_detections, lst_blocks);
@@ -170,7 +163,12 @@ void CBlockSensor::DetectBlocks(cv::Mat& c_frame_y,
 /****************************************/
 /****************************************/
 
-void CBlockSensor::DetectLeds(STag& s_tag, cv::Mat& c_y_frame, cv::Mat& c_u_frame, cv::Mat& c_v_frame) {
+void CBlockSensor::DetectLeds(STag& s_tag, image_u8_t* pt_y_frame, image_u8_t* pt_u_frame, image_u8_t* pt_v_frame) {
+   /* create opencv headers (no copying happens here) */
+   cv::Mat c_y_frame(pt_u_frame->height, pt_u_frame->width, CV_8UC1, pt_u_frame->buf, pt_u_frame->stride);
+   cv::Mat c_u_frame(pt_u_frame->height, pt_u_frame->width, CV_8UC1, pt_u_frame->buf, pt_u_frame->stride);
+   cv::Mat c_v_frame(pt_v_frame->height, pt_v_frame->width, CV_8UC1, pt_v_frame->buf, pt_v_frame->stride);
+
    std::vector<cv::Point3f> vecLedPoints = {
       cv::Point3f(-m_fInterLedLength * 0.5f, 0, 0),
       cv::Point3f( m_fInterLedLength * 0.5f, 0, 0),

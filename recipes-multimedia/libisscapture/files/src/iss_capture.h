@@ -8,8 +8,9 @@
 #ifndef _OV_VIDEO_CAPTURE_H_
 #define _OV_VIDEO_CAPTURE_H_
 
-#include <opencv2/core/core.hpp>
 #include <linux/videodev2.h>
+
+#include <apriltag/image_u8.h>
 
 class CISSCaptureDevice {
 public:
@@ -61,15 +62,11 @@ public:
    // Returns true if the device already has been opened. 
    inline bool IsOpened() const { return is_opened_; }
 
-   bool WriteFrameToDisk(std::string s_path_to_file);
-   
    // Grabs a single frame from the image sensor
    bool Grab();
 
    // Grabs, decodes and returns the grabbed image.
-   bool GetFrame(cv::Mat& c_y_channel, cv::Mat& c_u_channel, cv::Mat& c_v_channel);
-
-
+   bool GetFrame(image_u8_t* pt_y_channel, image_u8_t* pt_u_channel, image_u8_t* pt_v_channel);
    
 
 private:

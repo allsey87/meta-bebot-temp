@@ -7,6 +7,8 @@
 
 #include "target.h"
 
+#include <apriltag/image_u8.h>
+
 #define NUM_LEDS 12
 
 class CPacketControlInterface;
@@ -66,10 +68,28 @@ public:
    enum class EColor {
       RED, GREEN, BLUE
    };
+
+   struct SImageBuffer {
+      SImageBuffer() {
+         Y = image_u8_create(640u, 360u);
+         U = image_u8_create(640u, 360u);
+         V = image_u8_create(640u, 360u);
+      }
+
+      ~SImageBuffer() {
+         image_u8_destroy(Y);
+         image_u8_destroy(U);
+         image_u8_destroy(V);
+      }
+
+      image_u8_t* Y;
+      image_u8_t* U;
+      image_u8_t* V;
+   };
    
    struct SSensorData {
       struct {
-         cv::Mat Y, U, V;
+         SImageBuffer Buffers[2];
          bool Enable = true;
          struct {
             std::list<SBlock> Blocks;
