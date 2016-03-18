@@ -350,8 +350,6 @@ void CBlockDemo::Exec() {
       }
       */
 
-      m_pcBlockDetectionPipeline->WriteDebugToScreen();
-   
       unControlTick++;     
 
       /* wait for responses from the manipulator interface */

@@ -22,8 +22,6 @@ public:
 
    void Disable();
 
-   void WriteDebugToScreen();
-
    void GetDetectedBlocks(std::list<SBlock>& lst_detected_blocks);
 
 public: //private
@@ -44,7 +42,6 @@ public: //private
    struct SImageBuffer {
       SImageBuffer();
       ~SImageBuffer();
-      std::string Id;
       image_u8_t* Y;
       image_u8_t* U;
       image_u8_t* V;
@@ -57,7 +54,6 @@ public: //private
    } m_psImageBuffers[2];
 
    struct SBlockListBuffer {
-      std::string Id;
       std::list<SBlock> Blocks;
       std::mutex Mutex;
       enum class EState {

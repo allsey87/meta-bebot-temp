@@ -33,7 +33,7 @@ CBlockSensor::CBlockSensor() {
    /* configure the tag detector */
    m_psTagDetector->quad_decimate = 1.0f;
    m_psTagDetector->quad_sigma = 0.0f;
-   m_psTagDetector->nthreads = 2;
+   m_psTagDetector->nthreads = 1;
    m_psTagDetector->debug = 0;
    m_psTagDetector->refine_edges = 1;
    m_psTagDetector->refine_decode = 0;
