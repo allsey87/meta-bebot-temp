@@ -25,6 +25,7 @@
 #include "block_demo.h"
 #include "block_tracker.h"
 #include "block_sensor.h"
+#include "block_detection_pipeline.h"
 #include "frame_annotator.h"
 #include "leds.h"
 #include "packet_control_interface.h"
@@ -59,15 +60,6 @@ int main(int n_arg_count, char* ppch_args[]) {
       cBlockDemo.Exec();
    }
    return nInitStatus;
-}
-
-/****************************************/
-/****************************************/
-
-double GetTime() {
-   struct timeval sT;
-   ::gettimeofday(&sT, NULL);
-   return (static_cast<double>(sT.tv_sec) + static_cast<double>(sT.tv_usec)/1000000.);
 }
 
 /****************************************/
@@ -237,6 +229,9 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    m_pcBlockSensor = new CBlockSensor;
    m_pcBlockTracker = new CBlockTracker(640u, 360u, 10u, 5u, 0.5f, 50.0f);
 
+   /* Create the block detection pipeline */
+   m_pcBlockDetectionPipeline = new CBlockDetectionPipeline(m_pcISSCaptureDevice, m_pcBlockSensor);
+
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
    m_psActuatorData = new SActuatorData;
@@ -264,7 +259,7 @@ void CBlockDemo::Exec() {
 
    /* Override actuator input limit to 100mA */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
-                                            static_cast<const uint8_t>(EActuatorInputLimit::L500));
+                                            static_cast<const uint8_t>(EActuatorInputLimit::L100));
 
    /* Enable the actuator power domain */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_POWER_ENABLE, true);
@@ -283,9 +278,10 @@ void CBlockDemo::Exec() {
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
    /* Enable charging for the electromagnetic capacitors */
-   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, false);
    
    /* Allow the electromagnet capacitors to charge to 50% so that we don't brown out the remote power supply */
+   /*
    while(!bShutdownSignal) {        
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
       if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
@@ -304,8 +300,10 @@ void CBlockDemo::Exec() {
       }
       sleep(1);
    }
+   */
    
    /* Start calibration of the lift actuator */
+   /*
    std::cerr << "Calibrating the lift actuator: ";
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::CALIBRATE_LIFT_ACTUATOR);
 
@@ -324,51 +322,37 @@ void CBlockDemo::Exec() {
       }
       sleep(1);
    }
+   */
    
    /* grab a couple frames to allow the sensor to adjust to the lighting conditions */
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
       m_pcISSCaptureDevice->Grab();
    }
-   
-   
-   
+
+   /* Start the block detection pipeline (async) */
+   m_pcBlockDetectionPipeline->Enable();
+
+   /* create time points */
    std::chrono::time_point<std::chrono::system_clock> tExperimentStart, tLastTick, tNow;
-   
+
+   /* record time at the start of the experiment */
    tExperimentStart = std::chrono::system_clock::now();
    
    for(;;) {
-      /* regulate the control tick rate to 200ms */
+      /* regulate the control tick rate to 100ms */
+      /*
       for(;;) {
          tNow = std::chrono::system_clock::now();
-         if(std::chrono::duration<float>(tNow - tLastTick).count() > 0.2f) {
+         if(std::chrono::duration<float>(tNow - tLastTick).count() > 0.1f) {
             tLastTick = tNow;
             break;
          }
       }
+      */
+
+      m_pcBlockDetectionPipeline->WriteDebugToScreen();
    
-      unControlTick++;
-      
-      /******** DO IMAGE PROCESSING ********/   
-      std::thread tImageProcessing([this]() {
-         if(m_psSensorData->ImageSensor.Enable) {
-            /* capture a frame  from the camera interface */
-            m_pcISSCaptureDevice->GetFrame(m_psSensorData->ImageSensor.Buffers[0].Y,
-                                           m_psSensorData->ImageSensor.Buffers[0].U,
-                                           m_psSensorData->ImageSensor.Buffers[0].V);                                 
-            /* Reset the list of detected blocks */
-            m_psSensorData->ImageSensor.Detections.Blocks.clear();
-            /* Populate that list with new detections */
-            m_pcBlockSensor->DetectBlocks(m_psSensorData->ImageSensor.Buffers[0].Y,
-                                          m_psSensorData->ImageSensor.Buffers[0].U,
-                                          m_psSensorData->ImageSensor.Buffers[0].V,
-                                          m_psSensorData->ImageSensor.Detections.Blocks);
-            /* Associate detections to a set of targets */
-            m_pcBlockTracker->AssociateAndTrackTargets(m_psSensorData->ImageSensor.Detections.Blocks,
-                                                       m_psSensorData->ImageSensor.Detections.Targets);
-                                                       
-            //m_pcStructureAnalyser->DetectStructures(m_psSensorData->ImageSensor.Detections.Targets);
-         }
-      });
+      unControlTick++;     
 
       /* wait for responses from the manipulator interface */
       bool bWaitingForRfResponse = true;
@@ -376,28 +360,16 @@ void CBlockDemo::Exec() {
       bool bWaitingForLiftActuatorStateResponse = true;
       bool bWaitingForElectromagnetCharge = true;
       
-      std::chrono::time_point<std::chrono::system_clock> tCmdDispatch; 
-      
       /******** SAMPLE SENSORS ********/
       /* send requests to sample sensors on the manipulator microcontroller */
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+      m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
 
-      do {
-         if(std::chrono::duration<float>(std::chrono::system_clock::now() - tCmdDispatch).count() > 0.5) {
-            tCmdDispatch = std::chrono::system_clock::now();
-            if(bWaitingForRfResponse) {
-               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
-            }
-            if(bWaitingForLiftActuatorPositionResponse) {
-               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
-            }
-            if(bWaitingForLiftActuatorStateResponse) {
-               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
-            }
-            if(bWaitingForElectromagnetCharge) {
-               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
-            }
-         }
-      
+      while((bWaitingForRfResponse || bWaitingForLiftActuatorStateResponse || 
+             bWaitingForLiftActuatorPositionResponse || bWaitingForElectromagnetCharge) && !bShutdownSignal) {     
+         /* process input on the manipulator interface */
          m_pcManipulatorInterface->ProcessInput();
          if(m_pcManipulatorInterface->GetState() == CPacketControlInterface::EState::RECV_COMMAND) {
             const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
@@ -471,13 +443,10 @@ void CBlockDemo::Exec() {
                continue;
             }
          }
-      } while((bWaitingForRfResponse || 
-               bWaitingForLiftActuatorStateResponse || 
-               bWaitingForLiftActuatorPositionResponse ||
-               bWaitingForElectromagnetCharge) && !bShutdownSignal);
+      }
       
       /* Store the system time and the control tick counter */
-      m_psSensorData->Clock.Time = GetTime();
+      m_psSensorData->Clock.Time = std::chrono::duration<float>(std::chrono::system_clock::now() - tExperimentStart).count();
       m_psSensorData->Clock.Ticks = unControlTick;
 
       if(m_bVerboseOutput) {
@@ -503,10 +472,7 @@ void CBlockDemo::Exec() {
          }
          std::cerr << std::endl;
       }
-      
-      /* wait for image processing to complete */
-      tImageProcessing.join();
-       
+
       /*
       for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
          std::cerr << "Target #" << s_target.Id << ":" << std::endl
@@ -527,8 +493,19 @@ void CBlockDemo::Exec() {
       }
       */
       
+
+      /******** UPDATE TARGET AND STRUCTURE DETECTION ********/
+      
+      std::list<SBlock> lstDetectedBlocks;
+      m_pcBlockDetectionPipeline->GetDetectedBlocks(lstDetectedBlocks);
+
+      /* Associate detections to a set of targets */
+      m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, m_psSensorData->ImageSensor.Detections.Targets);
+      //m_pcStructureAnalyser->DetectStructures(m_psSensorData->ImageSensor.Detections.Targets);
+
+
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
+      bool bTaskIsComplete = false;//m_pcManipulatorTestingTask->Step();
 
       /* Output the current state of the state machine */
       std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
@@ -637,17 +614,18 @@ void CBlockDemo::Exec() {
       }
      
       /* Annotate the frame if requested */
+      /*
       if(m_bAnnotateImages) {
          for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
             std::ostringstream cText;
             cText << '[' << s_target.Id << ']';
-            /* create opencv header for the frame to work with the data */
+            // create opencv header for the frame to work with the data
             cv::Mat cFrameToAnnotate(m_psSensorData->ImageSensor.Buffers[0].Y->height,
                                      m_psSensorData->ImageSensor.Buffers[0].Y->width,
                                      CV_8UC1,
                                      m_psSensorData->ImageSensor.Buffers[0].Y->buf,
                                      m_psSensorData->ImageSensor.Buffers[0].Y->stride);
-            /* annotate the frame */
+            // annotate the frame
             CFrameAnnotator::Annotate(cFrameToAnnotate,
                                       s_target,
                                       m_pcBlockSensor->GetCameraMatrix(),
@@ -655,39 +633,45 @@ void CBlockDemo::Exec() {
                                       cText.str());
          }
       }
+      */
       
 
       /* save frame to disk if a path was given */
+      /*
       if(!m_strImageSavePath.empty()) {
          std::ostringstream cStream;
          cStream << m_strImageSavePath << "_" << std::setfill('0') << std::setw(5) << unControlTick << ".y";
          std::ofstream cFrameOutputY(cStream.str().c_str());
-         /* take a pointer to the Y channel */
+         // take a pointer to the Y channel
          image_u8_t* ptImage = m_psSensorData->ImageSensor.Buffers[0].Y;
          for(unsigned int un_row = 0; un_row < ptImage->height; un_row++) {
-            /* take a pointer to the image row */
+            // take a pointer to the image row
             uint8_t* pun_row = ptImage->buf + (un_row * ptImage->stride);
-            /* write it to the output file */
+            // write it to the output file
             cFrameOutputY.write(reinterpret_cast<char*>(pun_row), ptImage->width);
          }
       }
-      
+      */
+
       /* stream frame to host if connected */
+      /*
       if(m_pcTCPImageSocket != nullptr && m_psSensorData->ImageSensor.Enable) {
          image_u8_t* pt_image = m_psSensorData->ImageSensor.Buffers[0].Y;
          m_pcTCPImageSocket->Write(pt_image->buf, pt_image->width, pt_image->height, pt_image->stride);
       }
+      */
 
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */
-      if(bShutdownSignal || bTaskIsComplete) {
+      if(bShutdownSignal || bTaskIsComplete || unControlTick > 50) {
          std::cerr << "Shutdown: request acknowledged" << std::endl;
          break;
       }
    }
    
-   std::cerr << "Shutdown: experiment run time was " 
-             << std::chrono::duration<float>(std::chrono::system_clock::now() - tExperimentStart).count() 
-             << " seconds" << std::endl;
+   float fExperimentRuntime = std::chrono::duration<float>(std::chrono::system_clock::now() - tExperimentStart).count();
+
+   std::cerr << "Shutdown: experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
+   std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<float>(unControlTick) << " seconds" << std::endl;
 
    /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */
@@ -703,6 +687,9 @@ void CBlockDemo::Exec() {
                                            sizeof(pnStopDriveSystemData));
    /* Power down the differential drive system */
    m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_ENABLE, false);
+
+   /* Disable block detection pipeline */
+   m_pcBlockDetectionPipeline->Disable();
 
    /* Switch off LEDs */
    for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_LEDS; unLEDIdx++) {    

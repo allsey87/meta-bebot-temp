@@ -16,6 +16,7 @@ class CTCPImageSocket;
 class CBlockSensor;
 class CBlockTracker;
 class CISSCaptureDevice;
+class CBlockDetectionPipeline;
 class CManipulatorTestingTask;
 class CLED;
 
@@ -45,6 +46,9 @@ public:
    
    void Exec();
 
+   /* to implement */
+   void Destroy() {}
+
 public:
    enum class EGripperFieldMode : uint8_t {
       CONSTRUCTIVE = 0,
@@ -69,30 +73,10 @@ public:
       RED, GREEN, BLUE
    };
 
-   struct SImageBuffer {
-      SImageBuffer() {
-         Y = image_u8_create(640u, 360u);
-         U = image_u8_create(640u, 360u);
-         V = image_u8_create(640u, 360u);
-      }
-
-      ~SImageBuffer() {
-         image_u8_destroy(Y);
-         image_u8_destroy(U);
-         image_u8_destroy(V);
-      }
-
-      image_u8_t* Y;
-      image_u8_t* U;
-      image_u8_t* V;
-   };
-   
    struct SSensorData {
       struct {
-         SImageBuffer Buffers[2];
          bool Enable = true;
          struct {
-            std::list<SBlock> Blocks;
             std::list<STarget> Targets;
          } Detections;
       } ImageSensor;
@@ -115,7 +99,7 @@ public:
          } LiftActuator;
       } ManipulatorModule;
       struct {
-         double Time = 0;
+         float Time = 0;
          unsigned int Ticks = 0;
       } Clock;
    };
@@ -176,6 +160,8 @@ private:
    
    CBlockSensor* m_pcBlockSensor;
    CBlockTracker* m_pcBlockTracker;
+
+   CBlockDetectionPipeline* m_pcBlockDetectionPipeline;
 
    SSensorData* m_psSensorData;
    SActuatorData* m_psActuatorData;
