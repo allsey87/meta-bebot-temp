@@ -3,9 +3,15 @@
 #include <fstream>
 #include <map>
 #include <vector>
+#include <list>
 #include <cmath>
+#include <cstdint>
 
+#include <signal.h>
 #include <unistd.h>
+
+
+#include "packet_control_interface.h"
 
 #define TEST_DELAY 2000
 
@@ -108,9 +114,43 @@ private:
    std::vector<CLED> m_vecLEDs;
 };
 
-int main() {
+/****************************************/
+/****************************************/
+
+volatile bool bShutdownSignal = false;
+
+void InteruptSignalHandler(int n_unused) {
+   bShutdownSignal = true;
+}
+
+/****************************************/
+/****************************************/
+
+int main(int n_arg_count, char* ppch_args[]) {
+   /* Register the SIGINT handler to shut down system cleanly on abort */
+   ::signal(SIGINT, InteruptSignalHandler);
+
+   enum class EActuatorInputLimit : uint8_t {
+      LAUTO = 0, L100 = 1, L150 = 2, L500 = 3, L900 = 4
+   };
+
    std::vector<CRangeFinder> vecRangeFinders;
    std::vector<CLED> vecLEDs;
+
+   CPacketControlInterface* m_pcPowerManagementInterface =
+      new CPacketControlInterface("power management", "/dev/ttySC0", 57600);
+
+   if(!m_pcPowerManagementInterface->Open()) {
+         std::cerr << "Error" << std::endl << "Could not open the device" << std::endl;
+         return -ENODEV;
+   }
+
+   /* Override actuator input limit to 100mA */
+   m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
+                                            static_cast<const uint8_t>(EActuatorInputLimit::L100));
+
+   /* Enable the actuator power domain */
+   m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_POWER_ENABLE, true);   
 
    for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_DEVICES; un_dev_idx++) {
       vecRangeFinders.emplace_back("/sys/class/rfs/", "bebot:rf_chassis", un_dev_idx);
@@ -145,12 +185,33 @@ int main() {
    }
    */
 
-   for(;;) {
+   while(!bShutdownSignal) {
+      std::vector<std::list<uint16_t>> vecReadings(NUM_DEVICES);
+
       for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_DEVICES; un_dev_idx++) {
-         float fAverageRaw = (
-            vecRangeFinders[un_dev_idx].Read() +
-            vecRangeFinders[un_dev_idx].Read() +
-            vecRangeFinders[un_dev_idx].Read()) / 3.0f;
+         vecReadings[un_dev_idx].push_front(vecRangeFinders[un_dev_idx].Read());
+         if(vecReadings[un_dev_idx].size() > 5) {
+            vecReadings[un_dev_idx].pop_back();
+         }
+
+         std::list<uint16_t> lstReadings;
+         std::copy(std::begin(vecReadings[un_dev_idx]),
+                   std::end(vecReadings[un_dev_idx]),
+                   std::begin(lstReadings));
+
+         lstReadings.sort();
+         
+         std::list<uint16_t>::iterator itMedianReading = std::begin(lstReadings);
+         std::advance(itMedianReading, static_cast<size_t>(lstReadings.size() / 2.0f));
+
+         float fAverageRaw = static_cast<float>(*itMedianReading);
+         
+         /*
+         for(uint16_t un_reading : vecReadings[un_dev_idx]) {
+            fAverageRaw += static_cast<float>(un_reading);
+         }
+         fAverageRaw /= static_cast<float>(vecReadings[un_dev_idx].size());
+         */
 
          float fAverage = 67.0f * std::pow(fAverageRaw + 1, -0.4f);
        
@@ -159,6 +220,13 @@ int main() {
          vecLEDs[un_dev_idx].SetBlue(std::floor(35.0f - std::fmin(35.0f, std::fabs(70 - fAverage))));
       }
    }
+
+   /* Disable the actuator power domain */
+   m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_POWER_ENABLE, false);
+   /* Disable actuator input limit override */
+   m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
+                                            static_cast<const uint8_t>(EActuatorInputLimit::LAUTO));
+
 }
 
 
