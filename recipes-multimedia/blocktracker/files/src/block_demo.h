@@ -6,6 +6,7 @@
 #include <deque>
 
 #include "target.h"
+#include "image_processing_pipeline.h"
 
 #include <apriltag/image_u8.h>
 
@@ -16,7 +17,6 @@ class CTCPImageSocket;
 class CBlockSensor;
 class CBlockTracker;
 class CISSCaptureDevice;
-class CBlockDetectionPipeline;
 class CManipulatorTestingTask;
 class CLED;
 
@@ -75,7 +75,6 @@ public:
 
    struct SSensorData {
       struct {
-         bool Enable = true;
          struct {
             std::list<STarget> Targets;
          } Detections;
@@ -158,10 +157,13 @@ private:
    CISSCaptureDevice* m_pcISSCaptureDevice;
    CTCPImageSocket* m_pcTCPImageSocket;
    
+   std::shared_ptr<CAsyncCaptureOp> m_ptrCaptureOp;
+   std::shared_ptr<CAsyncDetectOp> m_ptrDetectOp;
+   std::shared_ptr<CAsyncStreamOp> m_ptrStreamOp;
+   std::shared_ptr<CAsyncSaveOp> m_ptrSaveOp;
+   
    CBlockSensor* m_pcBlockSensor;
    CBlockTracker* m_pcBlockTracker;
-
-   CBlockDetectionPipeline* m_pcBlockDetectionPipeline;
 
    SSensorData* m_psSensorData;
    SActuatorData* m_psActuatorData;

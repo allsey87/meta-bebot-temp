@@ -15,7 +15,7 @@
 
 #define MTT_BLOCK_SEP_THRESHOLD 0.065
 
-#define BASE_VELOCITY 60
+#define BASE_VELOCITY 30
 
 class CManipulatorTestingTask : public CState {
    
@@ -251,8 +251,6 @@ public:
 
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
-               /* computer vision isn't used during the near block approach */
-               m_psSensorData->ImageSensor.Enable = false;
                /* lower the manipulator */
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = (MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 3u);
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
@@ -342,13 +340,11 @@ public:
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = (MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 10u);
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
-               m_psSensorData->ImageSensor.Enable = true;
             }),
             CState("wait_for_target"),
          }),
          CState("search_for_structures", nullptr, nullptr, {
             CState("set_search_velocity", [this] {
-               m_psSensorData->ImageSensor.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
@@ -387,7 +383,6 @@ public:
          }),
          CState("search_for_previous_structure", nullptr, nullptr, {
             CState("set_search_velocity", [this] {
-               m_psSensorData->ImageSensor.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = -BASE_VELOCITY;

@@ -15,7 +15,7 @@
 
 #define MTT_BLOCK_SEP_THRESHOLD 0.065
 
-#define BASE_VELOCITY 60
+#define BASE_VELOCITY 30
 
 class CManipulatorTestingTask : public CState {
    

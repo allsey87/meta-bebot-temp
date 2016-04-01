@@ -21,7 +21,6 @@ add_executable(blocktracker
                src/block_demo.cc
                src/block_sensor.cc
                src/block_tracker.cc
-               src/block_detection_pipeline.cc
                src/frame_annotator.cc
                src/state.cc
                src/tag.cc
