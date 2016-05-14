@@ -1,9 +1,10 @@
 /**
  * @file block_demo.cc
- * @brief Block demo applcation
+ * @brief Block demo application
  * @author: Michael Allwright
  */
 
+#include <csignal>
 #include <cstring>
 #include <iostream>
 #include <iomanip>
@@ -13,7 +14,6 @@
 #include <chrono>
 
 #include <error.h>
-#include <signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -25,14 +25,15 @@
 #include "block_demo.h"
 #include "block_tracker.h"
 #include "block_sensor.h"
-#include "image_processing_pipeline.h"
 #include "frame_annotator.h"
+#include "image_processing_pipeline.h"
 #include "leds.h"
 #include "packet_control_interface.h"
+#include "structure_analyser.h"
 #include "tcp_image_socket.h"
 
 //#include "qualitative_stigmergy_test.h"
-#include "quantitative_stigmergy_test.h"
+//#include "quantitative_stigmergy_test.h"
 
 /****************************************/
 /****************************************/
@@ -48,7 +49,7 @@ void InteruptSignalHandler(int n_unused) {
 
 int main(int n_arg_count, char* ppch_args[]) {
    /* Register the SIGINT handler to shut down system cleanly on abort */
-   ::signal(SIGINT, InteruptSignalHandler);
+   std::signal(SIGINT, InteruptSignalHandler);
    /* Print intro message */
    std::cerr << CBlockDemo::GetIntroString() << std::endl;
    /* Create application */
@@ -92,12 +93,14 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    while ((c = ::getopt(n_arg_count, ppch_args, "avr:s:")) != -1) {     
       switch (c) {
       case 'a':
-         m_bAnnotateImages = true;
+         m_bAnnotateEnable = true;
          break;
       case 'r':
+         m_bStreamEnable = true;
          m_strRemoteHost = optarg;
          break;
       case 's':
+         m_bSaveEnable = true;
          m_strImageSavePath = optarg;
          break;
       case 'v':
@@ -183,7 +186,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    }
  
    /* connect to the remote host for image streaming */
-   if(!m_strRemoteHost.empty()) {
+   if(m_bStreamEnable) {
       /* find the hostname port number seperator */
       std::size_t unSepIdx = m_strRemoteHost.find_last_of(':');
       /* pass the hostname and port number to the TCP image socket */
@@ -218,7 +221,9 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
       std::cerr << "Error" << std::endl << "Could not open /dev/video0" << std::endl;
       return -ENODEV;
    }
-   std::cerr << "OK" << std::endl;
+   else {
+      std::cerr << "OK" << std::endl;
+   }
    
    /* Link to the LEDs */
    for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_LEDS; un_dev_idx++) {
@@ -226,40 +231,65 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    }
 
    /* Create the block sensor/tracker instances */
-   m_pcBlockSensor = new CBlockSensor;
-   m_pcBlockTracker = new CBlockTracker(640u, 360u, 10u, 5u, 0.5f, 50.0f);
+   m_pcBlockSensor = new CBlockSensor(m_cCameraMatrix, m_cDistortionParameters);
+   m_pcFrameAnnotator = new CFrameAnnotator(m_cCameraMatrix, m_cDistortionParameters);
+   m_pcBlockTracker = new CBlockTracker(3u, 0.05f);
+   m_pcStructureAnalyser = new CStructureAnalyser;
 
    /* Create the image processing pipeline operations */
+   /* Capture */
    m_ptrCaptureOp = std::make_shared<CAsyncCaptureOp>(m_pcISSCaptureDevice);
-   m_ptrDetectOp = std::make_shared<CAsyncDetectOp>(m_pcBlockSensor);
-   m_ptrStreamOp = std::make_shared<CAsyncStreamOp>(m_pcTCPImageSocket, 0u);
-   m_ptrSaveOp = std::make_shared<CAsyncSaveOp>("./test", 2u, 0u, 0u);
-
-   /* Add some empty buffers to the capture operation */   
+   /* Inject some empty buffers into the capture operation */   
    std::list<SBuffer> lstBuffers;
    lstBuffers.emplace_back(640u, 360u);
    lstBuffers.emplace_back(640u, 360u);
    lstBuffers.emplace_back(640u, 360u);
    lstBuffers.emplace_back(640u, 360u);
    m_ptrCaptureOp->Enqueue(lstBuffers);
-
-   /* connect the output of the capture operation to the detection operation */ 
-   m_ptrCaptureOp->SetNextOp(m_ptrDetectOp);
-   m_ptrDetectOp->SetNextOp(m_ptrSaveOp);
-   m_ptrStreamOp->SetNextOp(m_ptrSaveOp);
-   m_ptrSaveOp->SetNextOp(m_ptrCaptureOp); // reuse buffer at end of pipeline
-
-   /* Enable all operations except capture */
+   /* Detect */
+   m_ptrDetectOp = std::make_shared<CAsyncDetectOp>(m_pcBlockSensor);
    m_ptrDetectOp->SetEnable(true);
-   m_ptrStreamOp->SetEnable(true);
-   m_ptrSaveOp->SetEnable(true);
+   /* Save (optional) */
+   if(m_bSaveEnable) {
+      m_ptrSaveOp = std::make_shared<CAsyncSaveOp>(m_strImageSavePath, 2u, 0u, 0u, m_tExperimentStart);
+      m_ptrSaveOp->SetEnable(true);
+   }
+   /* Annotate (optional) */
+   if(m_bAnnotateEnable) {
+      m_ptrAnnotateOp = std::make_shared<CAsyncAnnotateOp>(4u);
+      m_ptrAnnotateOp->SetEnable(true);
+   }
+   /* Stream (optional) */
+   if(m_bStreamEnable) {
+      m_ptrStreamOp = std::make_shared<CAsyncStreamOp>(m_pcTCPImageSocket, 4u);
+      m_ptrStreamOp->SetEnable(true);
+   }
+
+   std::list<std::shared_ptr<CAsyncPipelineOp>> lstPipelineOps = {
+      m_ptrCaptureOp, m_ptrDetectOp, m_ptrSaveOp, m_ptrAnnotateOp, m_ptrStreamOp
+   };
+   /* remove unused operations */
+   lstPipelineOps.remove(nullptr);
+   /* connect the remaining operations together */
+   for(auto it_op = std::begin(lstPipelineOps);
+       it_op != std::end(lstPipelineOps);
+       it_op++) {
+      auto itNextOp = std::next(it_op);
+      if(itNextOp != std::end(lstPipelineOps)) {
+         (*it_op)->SetNextOp(*itNextOp);
+      }
+      else {
+         /* connect the last element back to the front operation */
+         (*it_op)->SetNextOp(lstPipelineOps.front());
+      }
+   }
    
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
    m_psActuatorData = new SActuatorData;
   
    /* Create the task */
-   m_pcManipulatorTestingTask = new CManipulatorTestingTask(m_psSensorData, m_psActuatorData);
+   //m_pcManipulatorTestingTask = new CManipulatorTestingTask(m_psSensorData, m_psActuatorData);
 
    /* Initialisation was successful */
    return 0;
@@ -337,16 +367,24 @@ void CBlockDemo::Exec() {
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
       m_pcISSCaptureDevice->Grab();
    }
+
+   /* create time point for the last tick */
+   std::chrono::time_point<std::chrono::steady_clock> tLastTick;
+   /* mark the start time of the experiment */
+   m_tExperimentStart = std::chrono::steady_clock::now();
    /* Start the async image processing pipeline by enabling the capture operation */
    m_ptrCaptureOp->SetEnable(true);
-   /* create time points, set experiment start time to now */
-   std::chrono::time_point<std::chrono::steady_clock> tLastTick, tExperimentStart = std::chrono::steady_clock::now();
+
+   /* list for storing the detected blocks, targets and stuctures */
+   SBlock::TList tDetectedBlockList;
+   STarget::TList tTrackedTargetList;
+   SStructure::TList tStructureList;
    
    for(;;) {
       /* regulate the control tick rate to 150ms */
       for(;;) {
          std::chrono::time_point<std::chrono::steady_clock> tNow = std::chrono::steady_clock::now();
-         if(std::chrono::duration<float>(tNow - tLastTick).count() > 0.15f) {
+         if(std::chrono::duration<float>(tNow - tLastTick) > std::chrono::milliseconds(150)) {
             tLastTick = tNow;
             break;
          }
@@ -355,8 +393,7 @@ void CBlockDemo::Exec() {
       unControlTick++;
 
       /******** SAMPLE SENSORS ********/     
-      std::list<SBlock> lstDetectedBlocks;
-      std::chrono::time_point<std::chrono::steady_clock> tDetectionTimestamp;
+      std::chrono::time_point<std::chrono::steady_clock> tpDetectionTimestamp;
 
       /* wait for detected blocks */
       while(!m_ptrDetectOp->HasDetectedBlocks()) {
@@ -364,14 +401,37 @@ void CBlockDemo::Exec() {
       }
       /* consume all detected blocks */
       while(m_ptrDetectOp->HasDetectedBlocks()) {
-         m_ptrDetectOp->GetDetectedBlocks(lstDetectedBlocks, tDetectionTimestamp);
-         m_pcBlockTracker->AssociateAndTrackTargets(lstDetectedBlocks, m_psSensorData->ImageSensor.Detections.Targets);
+         /* Get the detected blocks from the pipeline */
+         m_ptrDetectOp->GetDetectedBlocks(tDetectedBlockList, tpDetectionTimestamp);
+         /* Associate detections to a set of targets */
+         m_pcBlockTracker->AssociateAndTrackTargets(tpDetectionTimestamp, tDetectedBlockList, tTrackedTargetList);
+         /* Detect structures */         
+         m_pcStructureAnalyser->DetectStructures(tTrackedTargetList, tStructureList);
+         
+         /* annotate images if enabled */
+         if(m_bAnnotateEnable) {
+            std::shared_ptr<image_u8_t> ptrBuffer;
+            std::chrono::time_point<std::chrono::steady_clock> tpTimestamp;
+            m_ptrAnnotateOp->GetBuffer(ptrBuffer, tpTimestamp);
+            if(tpTimestamp == tpDetectionTimestamp) {
+               for(const STarget& s_target : tTrackedTargetList) {
+                  cv::Scalar cColor(0.0f,0.0f,0.0f);
+                  m_pcFrameAnnotator->Annotate(s_target, cColor);
+               }
+               /* create an opencv header for the image data */
+               cv::Mat cFrame(ptrBuffer->height, ptrBuffer->width, CV_8UC1, ptrBuffer->buf, ptrBuffer->stride);
+               /* annotate it */
+               m_pcFrameAnnotator->WriteToFrame(cFrame);
+               m_pcFrameAnnotator->Clear();
+               /* reset the shared ptr before releasing buffer */
+               ptrBuffer = nullptr;
+               m_ptrAnnotateOp->ReleaseBuffer();
+            }
+            else {
+               ptrBuffer = nullptr;
+            }
+         }
       }
-
-
-      /* Associate detections to a set of targets */
-      
-      //m_pcStructureAnalyser->DetectStructures(m_psSensorData->ImageSensor.Detections.Targets);
 
       /* wait for responses from the manipulator interface */
       bool bWaitingForRfResponse = true;
@@ -464,58 +524,14 @@ void CBlockDemo::Exec() {
       }
       
       /* Store the experiment timer and the control tick counter */
-      m_psSensorData->Clock.Time = std::chrono::duration<float>(tLastTick - tExperimentStart).count();
+      m_psSensorData->Clock.Time = std::chrono::duration<float>(tLastTick - m_tExperimentStart).count();
       m_psSensorData->Clock.Ticks = unControlTick;
 
-      if(m_bVerboseOutput) {
-         std::cerr << "[Sensors] "
-                   << "S(T) = "
-                   << (m_psSensorData->ManipulatorModule.LiftActuator.LimitSwitches.Top ? '1' : '0') << ", "
-                   << "S(B) = "
-                   << (m_psSensorData->ManipulatorModule.LiftActuator.LimitSwitches.Bottom ? '1' : '0') << ", "
-                   << "R(E) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.EndEffector << ", "
-                   << "R(L) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.Left << ", "
-                   << "R(R) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.Right << ", "
-                   << "R(F) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.Front << ", "
-                   << "R(U) = "
-                   << m_psSensorData->ManipulatorModule.RangeFinders.Underneath << ", " 
-                   << "Chg = ";
-          
-         for(uint8_t un_charge : m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge) {
-            std::cerr << static_cast<int>(un_charge) << " ";
-         }
-         std::cerr << std::endl;
-      }
-
-      /*
-      for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
-         std::cerr << "Target #" << s_target.Id << ":" << std::endl
-                   << "T(X, Y, Z): "
-                   << s_target.Observations.front().Translation.X << ", "
-                   << s_target.Observations.front().Translation.Y << ", "
-                   << s_target.Observations.front().Translation.Z << std::endl
-                   << "R(Z, Y, X): "
-                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.Z)).GetValue() << ", "
-                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.Y)).GetValue() << ", "
-                   << argos::ToDegrees(argos::CRadians(s_target.Observations.front().Rotation.X)).GetValue() << std::endl
-                   << "LEDs: ";
-                   
-         for(ELedState e_led_state : s_target.Observations.front().Tags.front().DetectedLeds) {
-            std::cerr << e_led_state << " ";
-         }
-         std::cerr << std::endl;
-      }
-      */
-
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
+      bool bTaskIsComplete = false;//m_pcManipulatorTestingTask->Step();
 
       /* Output the current state of the state machine */
-      std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
+      //std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
        
       /******** UPDATE ACTUATORS ********/
       /* Differential Drive System */
@@ -620,28 +636,6 @@ void CBlockDemo::Exec() {
          m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq = false;
       }
      
-      /* Annotate the frame if requested */
-      /*
-      if(m_bAnnotateImages) {
-         for(const STarget& s_target : m_psSensorData->ImageSensor.Detections.Targets) {
-            std::ostringstream cText;
-            cText << '[' << s_target.Id << ']';
-            // create opencv header for the frame to work with the data
-            cv::Mat cFrameToAnnotate(m_psSensorData->ImageSensor.Buffers[0].Y->height,
-                                     m_psSensorData->ImageSensor.Buffers[0].Y->width,
-                                     CV_8UC1,
-                                     m_psSensorData->ImageSensor.Buffers[0].Y->buf,
-                                     m_psSensorData->ImageSensor.Buffers[0].Y->stride);
-            // annotate the frame
-            CFrameAnnotator::Annotate(cFrameToAnnotate,
-                                      s_target,
-                                      m_pcBlockSensor->GetCameraMatrix(),
-                                      m_pcBlockSensor->GetDistortionParameters(),
-                                      cText.str());
-         }
-      }
-      */
-
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */
       if(bShutdownSignal || bTaskIsComplete) {
          std::cerr << "Shutdown: request acknowledged" << std::endl;
@@ -649,7 +643,7 @@ void CBlockDemo::Exec() {
       }
    }
    
-   float fExperimentRuntime = std::chrono::duration<float>(std::chrono::steady_clock::now() - tExperimentStart).count();
+   float fExperimentRuntime = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_tExperimentStart).count();
 
    std::cerr << "Shutdown: experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
    std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<float>(unControlTick) << " seconds" << std::endl;

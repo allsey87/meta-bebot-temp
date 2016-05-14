@@ -13,9 +13,15 @@ class CStructureAnalyser {
 public:
    CStructureAnalyser() {}
 
-   void DetectStructures(std::list<STarget>& lst_targets);
-private:
+   void DetectStructures(STarget::TList& lst_targets,
+                         SStructure::TList& lst_structures);
 
+   //void CalculateTransform(To, From, Translation, Rotation)
+   
+   //void MatchesConstraint(const SStructure& s_structure, const SConstraint& s_constraint)
+private:
+   const double m_fBlockSideLength = 0.055f;
+   const double m_fConnectivityThreshold = m_fBlockSideLength * 1.25f;
 };
 
 #endif

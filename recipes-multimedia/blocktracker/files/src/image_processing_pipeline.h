@@ -4,6 +4,7 @@
 #include <iss_capture.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <list>
 #include <map>
@@ -11,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+
 
 #include "block_sensor.h"
 #include "tcp_image_socket.h"
@@ -24,7 +26,7 @@ struct SBuffer {
    /* index (set by capture thread) */
    unsigned int Index = -1;
    /* capture time */
-   std::chrono::time_point<std::chrono::system_clock> Timestamp;
+   std::chrono::time_point<std::chrono::steady_clock> Timestamp;
    /* default constructor */
    SBuffer() :
       Y(image_u8_create(0, 0), image_u8_destroy),
@@ -145,7 +147,7 @@ private:
          std::cerr << "ISS Capture Device Failure" << std::endl;
       }
       s_buffer.Index = ++m_unCaptureIndex;
-      s_buffer.Timestamp = std::chrono::system_clock::now();
+      s_buffer.Timestamp = std::chrono::steady_clock::now();
    }
    CISSCaptureDevice* m_pcISSCaptureDevice;
    unsigned int m_unCaptureIndex = -1;
@@ -162,7 +164,7 @@ public:
       std::unique_lock<std::mutex> lckDetectionLists(m_mtxDetectionLists);
       return ((m_lstDetectedBlocks.size() > 0) && (m_lstDetectionTimestamps.size() > 0));
    }   
-   void GetDetectedBlocks(std::list<SBlock>& s_block_list, std::chrono::time_point<std::chrono::system_clock>& t_timestamp) {
+   void GetDetectedBlocks(std::list<SBlock>& s_block_list, std::chrono::time_point<std::chrono::steady_clock>& t_timestamp) {
       std::unique_lock<std::mutex> lckDetectionLists(m_mtxDetectionLists);
       if((m_lstDetectedBlocks.size() > 0) && (m_lstDetectionTimestamps.size() > 0)) {
          s_block_list = std::move(m_lstDetectedBlocks.front());
@@ -182,7 +184,56 @@ private:
    CBlockSensor* m_pcBlockSensor;
    std::mutex m_mtxDetectionLists;
    std::list<std::list<SBlock>> m_lstDetectedBlocks;
-   std::list<std::chrono::time_point<std::chrono::system_clock>> m_lstDetectionTimestamps;
+   std::list<std::chrono::time_point<std::chrono::steady_clock>> m_lstDetectionTimestamps;
+};
+
+/****************************************/
+/****************************************/
+
+class CAsyncAnnotateOp : public CAsyncPipelineOp {
+public:
+   CAsyncAnnotateOp(unsigned int un_annotate_period) :
+      m_unAnnotatePeriod(un_annotate_period),
+      m_ptrBuffer(nullptr) {}
+
+   void GetBuffer(std::shared_ptr<image_u8_t>& ptr_buffer,
+                  std::chrono::time_point<std::chrono::steady_clock>& tp_timestamp) {
+      std::unique_lock<std::mutex> lckBuffer(m_mtxBuffer);
+      /* wait until m_ptrBuffer has an associated buffer */
+      m_cvBufferReady.wait(lckBuffer, [this] {
+         return (m_ptrBuffer != nullptr);
+      });
+      ptr_buffer = m_ptrBuffer;
+      tp_timestamp = m_tpTimestamp;
+   }
+ 
+   void ReleaseBuffer() {
+      std::unique_lock<std::mutex> lckBuffer(m_mtxBuffer);    
+      m_ptrBuffer = nullptr;
+      lckBuffer.unlock();
+      m_cvBufferReady.notify_one();
+   }
+
+private:
+   void Execute(SBuffer& s_buffer) override {
+      if((m_unAnnotatePeriod != 0) && (s_buffer.Index % m_unAnnotatePeriod == 0)) {
+         std::unique_lock<std::mutex> lckBuffer(m_mtxBuffer);
+         /* set the buffer pointer and timestamp */
+         m_ptrBuffer = s_buffer.Y;
+         m_tpTimestamp = s_buffer.Timestamp;        
+         m_cvBufferReady.notify_one();
+         m_cvBufferReady.wait(lckBuffer, [this] {
+            return (m_ptrBuffer == nullptr);
+         });
+      }
+   }
+
+   std::chrono::time_point<std::chrono::steady_clock> m_tpTimestamp;
+   std::condition_variable m_cvBufferReady;
+   std::mutex m_mtxBuffer;
+   std::shared_ptr<image_u8_t> m_ptrBuffer;
+
+   unsigned int m_unAnnotatePeriod;
 };
 
 /****************************************/
@@ -191,7 +242,7 @@ private:
 class CAsyncStreamOp : public CAsyncPipelineOp {
 public:
    CAsyncStreamOp(CTCPImageSocket* pc_tcp_image_socket,
-                  unsigned int un_stream_period = 0u) :
+                  unsigned int un_stream_period) :
       m_pcTCPImageSocket(pc_tcp_image_socket),
       m_unStreamPeriod(un_stream_period) {}
 private:
@@ -212,16 +263,18 @@ private:
 
 class CAsyncSaveOp : public CAsyncPipelineOp {
 public:
-   CAsyncSaveOp(const std::string& str_image_save_path = ".",
-                unsigned int un_save_period_y = 0u,
-                unsigned int un_save_period_u = 0u,
-                unsigned int un_save_period_v = 0u) :
+   CAsyncSaveOp(const std::string& str_image_save_path,
+                unsigned int un_save_period_y,
+                unsigned int un_save_period_u,
+                unsigned int un_save_period_v,
+                std::chrono::time_point<std::chrono::steady_clock>& t_experiment_start) :
       m_strImageSavePath(str_image_save_path),
       m_mapSavePeriods {
          std::make_pair('y', un_save_period_y),
          std::make_pair('u', un_save_period_u),
          std::make_pair('v', un_save_period_v)
-      } {}
+      },
+      m_tExperimentStart(t_experiment_start) {}
 private:
    void Execute(SBuffer& s_buffer) override {
       for(const std::pair<const char, unsigned int>& c_save_period : m_mapSavePeriods) {
@@ -244,8 +297,7 @@ private:
                          << "_" 
                          << std::setfill('0') 
                          << std::setw(7) 
-                         //<< static_cast<int>(s_buffer.Index / c_save_period.second)
-                         << std::chrono::duration_cast<std::chrono::milliseconds>(s_buffer.Timestamp - m_tSaveTime).count()
+                         << std::chrono::duration_cast<std::chrono::milliseconds>(s_buffer.Timestamp - m_tExperimentStart).count()
                          << "." 
                          << c_save_period.first;
                std::ofstream cOutputFile(cFilePath.str().c_str());
@@ -261,7 +313,8 @@ private:
    }
    std::string m_strImageSavePath;
    std::map<char, unsigned int> m_mapSavePeriods;
-   std::chrono::time_point<std::chrono::system_clock> m_tSaveTime = std::chrono::system_clock::now();
+   /* this reference is to a variable initialized by the main thread once the experiment starts */
+   std::chrono::time_point<std::chrono::steady_clock>& m_tExperimentStart;
 };
 
 /****************************************/

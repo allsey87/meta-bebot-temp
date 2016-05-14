@@ -22,11 +22,13 @@ add_executable(blocktracker
                src/block_sensor.cc
                src/block_tracker.cc
                src/frame_annotator.cc
+               src/hungarian_solver.cc
+               src/packet_control_interface.cc
                src/state.cc
+               src/structure_analyser.cc
                src/tag.cc
-				   src/packet_control_interface.cc
- 				   src/tcp_image_socket.cc
-				   src/uart_socket.cc
+               src/tcp_image_socket.cc
+               src/uart_socket.cc
                src/argos3/core/utility/math/vector3.cpp
                src/argos3/core/utility/math/angles.cpp
                src/argos3/core/utility/math/matrix/rotationmatrix3.cpp)

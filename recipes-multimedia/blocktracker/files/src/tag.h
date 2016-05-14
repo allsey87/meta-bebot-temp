@@ -9,11 +9,12 @@ enum class ELedState {
 };
 
 struct STag {
-   std::vector<std::pair<float, float>> Corners;
-   std::pair<float, float> Center;
-   cv::Mat RotationVector;
-   cv::Mat TranslationVector;
+   std::vector<std::pair<double, double> > Corners;
+   std::pair<double, double> Center;
    std::vector<ELedState> DetectedLeds;
+
+   cv::Matx31d RotationVector;
+   cv::Matx31d TranslationVector;
 };
 
 std::ostream& operator<<(std::ostream& c_output_stream, ELedState e_led_state);

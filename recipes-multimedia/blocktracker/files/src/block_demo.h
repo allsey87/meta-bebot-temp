@@ -16,6 +16,8 @@ class CPacketControlInterface;
 class CTCPImageSocket;
 class CBlockSensor;
 class CBlockTracker;
+class CFrameAnnotator;
+class CStructureAnalyser;
 class CISSCaptureDevice;
 class CManipulatorTestingTask;
 class CLED;
@@ -24,15 +26,30 @@ class CBlockDemo {
 public:
    
    CBlockDemo() :
-      m_bAnnotateImages(false),
+      m_bAnnotateEnable(false),
+      m_bSaveEnable(false),
+      m_bStreamEnable(false),
+
       m_bVerboseOutput(false),
+
+      /* remote interfaces */
       m_pcPowerManagementInterface(nullptr),
       m_pcSensorActuatorInterface(nullptr),
       m_pcManipulatorInterface(nullptr),
+      /* local devices */ 
       m_pcISSCaptureDevice(nullptr),
       m_pcTCPImageSocket(nullptr),
+      /* async pipeline */ 
+      m_ptrAnnotateOp(nullptr),
+      m_ptrCaptureOp(nullptr),
+      m_ptrDetectOp(nullptr),
+      m_ptrSaveOp(nullptr),
+      m_ptrStreamOp(nullptr),
+      /* local algorithms */ 
       m_pcBlockSensor(nullptr),
-      m_pcBlockTracker(nullptr) {}
+      m_pcBlockTracker(nullptr),
+      m_pcStructureAnalyser(nullptr),
+      m_pcFrameAnnotator(nullptr) {}
    
    static const std::string& GetUsageString() {
       return m_strUsage;
@@ -142,7 +159,10 @@ public:
    };
 
 private:
-   bool m_bAnnotateImages;
+   bool m_bAnnotateEnable;
+   bool m_bSaveEnable;
+   bool m_bStreamEnable;
+
    bool m_bVerboseOutput;
    
    std::string m_strImageSavePath;
@@ -157,20 +177,46 @@ private:
    CISSCaptureDevice* m_pcISSCaptureDevice;
    CTCPImageSocket* m_pcTCPImageSocket;
    
+   std::shared_ptr<CAsyncAnnotateOp> m_ptrAnnotateOp;
    std::shared_ptr<CAsyncCaptureOp> m_ptrCaptureOp;
    std::shared_ptr<CAsyncDetectOp> m_ptrDetectOp;
-   std::shared_ptr<CAsyncStreamOp> m_ptrStreamOp;
    std::shared_ptr<CAsyncSaveOp> m_ptrSaveOp;
+   std::shared_ptr<CAsyncStreamOp> m_ptrStreamOp;
+
+   std::chrono::time_point<std::chrono::steady_clock> m_tExperimentStart;
    
    CBlockSensor* m_pcBlockSensor;
    CBlockTracker* m_pcBlockTracker;
-
+   CStructureAnalyser* m_pcStructureAnalyser;
+   CFrameAnnotator* m_pcFrameAnnotator;
+   
    SSensorData* m_psSensorData;
    SActuatorData* m_psActuatorData;
    CManipulatorTestingTask* m_pcManipulatorTestingTask;
 
    const static std::string m_strIntro;
    const static std::string m_strUsage;
+
+private:
+   /* camera focal length in pixels */
+   const double m_fFx =  8.8396142504070610e+02; 
+   const double m_fFy =  8.8396142504070610e+02; 
+   /* camera principal point */
+   const double m_fPx =  3.1950000000000000e+02;
+   const double m_fPy =  1.7950000000000000e+02;
+   /* camera distortion coefficients */
+   const double m_fK1 =  1.8433447851104852e-02;
+   const double m_fK2 =  1.6727474183089033e-01;
+   const double m_fK3 = -1.5480889084966631e+00;
+   /* camera matrix */
+   const cv::Matx<double, 3, 3> m_cCameraMatrix = 
+      cv::Matx<double, 3, 3>(m_fFx, 0.0f, m_fPx,
+                             0.0f, m_fFy, m_fPy,
+                             0.0f,  0.0f,  1.0f);
+   /* camera distortion parameters */
+   const cv::Matx<double, 5, 1> m_cDistortionParameters =
+      cv::Matx<double, 5, 1>(m_fK1, m_fK2, 0.0f, 0.0f, m_fK3);
+
 };
 
 #endif
