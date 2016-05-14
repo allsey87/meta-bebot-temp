@@ -150,7 +150,7 @@ public:
                   const SBlock& s_block = itTarget->Observations.front();
                  
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
-                  float fTagXOffsetTarget = 0.975f * std::abs((s_block.Translation.Z - 0.1f) / 0.25f);
+                  float fTagXOffsetTarget = 0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
 
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
                   fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
@@ -175,7 +175,7 @@ public:
                   const SBlock& s_block = itTarget->Observations.front();
                  
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
-                  float fTagXOffsetTarget = -0.975f * std::abs((s_block.Translation.Z - 0.1f) / 0.25f);
+                  float fTagXOffsetTarget = -0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
 
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
                   fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
@@ -251,8 +251,6 @@ public:
 
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = true;
-               /* computer vision isn't used during the near block approach */
-               m_psSensorData->ImageSensor.Enable = false;
                /* lower the manipulator */
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = (MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 3u);
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
@@ -342,13 +340,11 @@ public:
                m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = true;
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.Value = (MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 10u);
                m_psActuatorData->ManipulatorModule.LiftActuator.Position.UpdateReq = true;
-               m_psSensorData->ImageSensor.Enable = true;
             }),
             CState("wait_for_target"),
          }),
          CState("search_for_structure", nullptr, nullptr, {
             CState("set_search_velocity", [this] {
-               m_psSensorData->ImageSensor.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.Enable = true;
                m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = true;
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
@@ -439,7 +435,7 @@ public:
                   const SBlock& s_block = itTarget->Observations.front();            
                                                                      
                   TrackBlockViaManipulatorHeight(s_block, MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 2u);
-                  std::cerr << "s_block.Translation.Z = " << s_block.Translation.Z << std::endl;
+                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
 
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
                   if(fTagXOffset < 0) {
@@ -467,10 +463,10 @@ public:
                   const SBlock& s_block = itTarget->Observations.front();
                  
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
-                  float fTagXOffsetTarget = 0.975f * std::abs((s_block.Translation.Z - 0.1f) / 0.25f);
+                  float fTagXOffsetTarget = 0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
                   
                   std::cerr << "fTagXOffsetTarget = " << fTagXOffsetTarget << std::endl;
-                  std::cerr << "s_block.Translation.Z = " << s_block.Translation.Z << std::endl;
+                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
 
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
                   fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
@@ -495,10 +491,10 @@ public:
                   const SBlock& s_block = itTarget->Observations.front();
                  
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
-                  float fTagXOffsetTarget = -0.975f * std::abs((s_block.Translation.Z - 0.1f) / 0.25f);
+                  float fTagXOffsetTarget = -0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
                   
                   std::cerr << "fTagXOffsetTarget = " << fTagXOffsetTarget << std::endl;
-                  std::cerr << "s_block.Translation.Z = " << s_block.Translation.Z << std::endl;
+                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
 
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
                   fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
@@ -626,9 +622,7 @@ public:
                /* if the two blocks are with MTT_BLOCK_SEP_THRESHOLD of each other, this is not an unused block */
                const SBlock& s_block_a = itTarget->Observations.front();
                const SBlock& s_block_b = s_target.Observations.front();
-               float fNeighborBlockDist = sqrt(pow(s_block_a.Translation.X - s_block_b.Translation.X, 2) +
-                                               pow(s_block_a.Translation.Y - s_block_b.Translation.Y, 2) +
-                                               pow(s_block_a.Translation.Z - s_block_b.Translation.Z, 2));
+               float fNeighborBlockDist = argos::Distance(s_block_a.Translation, s_block_b.Translation);
                if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
                   std::cerr << "turn_towards_target: " << m_unTrackedTargetId << " and " << s_target.Id << " form a structure (" 
                             << fNeighborBlockDist << " < " << MTT_BLOCK_SEP_THRESHOLD << ")" << std::endl;
@@ -680,9 +674,7 @@ public:
                /* if the two blocks are with MTT_BLOCK_SEP_THRESHOLD of each other, this is not an unused block */
                const SBlock& s_block_a = itTarget->Observations.front();
                const SBlock& s_block_b = s_target.Observations.front();
-               float fNeighborBlockDist = sqrt(pow(s_block_a.Translation.X - s_block_b.Translation.X, 2) +
-                                               pow(s_block_a.Translation.Y - s_block_b.Translation.Y, 2) +
-                                               pow(s_block_a.Translation.Z - s_block_b.Translation.Z, 2));
+               float fNeighborBlockDist = argos::Distance(s_block_a.Translation, s_block_b.Translation);
                if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
                   std::cerr << "reverse_until_distance: " << m_unTrackedTargetId << " belonged to a structure" << std::endl;
                   return true;
@@ -701,8 +693,8 @@ public:
       
          if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
             const SBlock& s_block = itTarget->Observations.front();
-            std::cerr << "reverse_until_distance: target " << m_unTrackedTargetId << " is at Z = " << s_block.Translation.Z << "m" << std::endl;
-            return (s_block.Translation.Z > TARGET_Z_DIST_REVERSE_TO);
+            std::cerr << "reverse_until_distance: target " << m_unTrackedTargetId << " is at Z = " << s_block.Translation.GetZ() << "m" << std::endl;
+            return (s_block.Translation.GetZ() > TARGET_Z_DIST_REVERSE_TO);
          }
          return false; 
       });
@@ -725,8 +717,10 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z > -(M_PI / 18.0f) &&
-                  s_block.Rotation.Z <  (M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() > -(M_PI / 18.0f) &&
+                  cEulerAngleZ.GetValue() <  (M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::STRAIGHT;
                   return true;
                }
@@ -745,7 +739,9 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z <= -(M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() <= -(M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::RIGHT;
                   return true;
                }
@@ -764,7 +760,9 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z >= (M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() >= (M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::LEFT;
                   return true;
                }
@@ -789,9 +787,7 @@ public:
                /* if the two blocks are with MTT_BLOCK_SEP_THRESHOLD of each other, this is not an unused block */
                const SBlock& s_block_a = itTarget->Observations.front();
                const SBlock& s_block_b = s_target.Observations.front();
-               float fNeighborBlockDist = sqrt(pow(s_block_a.Translation.X - s_block_b.Translation.X, 2) +
-                                               pow(s_block_a.Translation.Y - s_block_b.Translation.Y, 2) +
-                                               pow(s_block_a.Translation.Z - s_block_b.Translation.Z, 2));
+               float fNeighborBlockDist = argos::Distance(s_block_a.Translation, s_block_b.Translation);
                if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
                   std::cerr << "approach_block_left: " << m_unTrackedTargetId << " belonged to a structure" << std::endl;
                   m_unTrackedTargetId = -1;
@@ -818,9 +814,7 @@ public:
                /* if the two blocks are with MTT_BLOCK_SEP_THRESHOLD of each other, this is not an unused block */
                const SBlock& s_block_a = itTarget->Observations.front();
                const SBlock& s_block_b = s_target.Observations.front();
-               float fNeighborBlockDist = sqrt(pow(s_block_a.Translation.X - s_block_b.Translation.X, 2) +
-                                               pow(s_block_a.Translation.Y - s_block_b.Translation.Y, 2) +
-                                               pow(s_block_a.Translation.Z - s_block_b.Translation.Z, 2));
+               float fNeighborBlockDist = argos::Distance(s_block_a.Translation, s_block_b.Translation);
                if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
                   std::cerr << "approach_block_right: " << m_unTrackedTargetId << " belonged to a structure" << std::endl;
                   m_unTrackedTargetId = -1;
@@ -847,9 +841,7 @@ public:
                /* if the two blocks are with MTT_BLOCK_SEP_THRESHOLD of each other, this is not an unused block */
                const SBlock& s_block_a = itTarget->Observations.front();
                const SBlock& s_block_b = s_target.Observations.front();
-               float fNeighborBlockDist = sqrt(pow(s_block_a.Translation.X - s_block_b.Translation.X, 2) +
-                                               pow(s_block_a.Translation.Y - s_block_b.Translation.Y, 2) +
-                                               pow(s_block_a.Translation.Z - s_block_b.Translation.Z, 2));
+               float fNeighborBlockDist = argos::Distance(s_block_a.Translation, s_block_b.Translation);
                if(fNeighborBlockDist < MTT_BLOCK_SEP_THRESHOLD) {
                   std::cerr << "approach_block_straight: " << m_unTrackedTargetId << " belonged to a structure" << std::endl;
                   m_unTrackedTargetId = -1;
@@ -1126,7 +1118,7 @@ public:
       
          if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {           
             const SBlock& s_block = itTarget->Observations.front();
-            if(s_block.Translation.Z > TARGET_Z_DIST_REVERSE_TO) {
+            if(s_block.Translation.GetZ() > TARGET_Z_DIST_REVERSE_TO) {
                return true;
             }
          }
@@ -1155,8 +1147,10 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z > -(M_PI / 18.0f) &&
-                  s_block.Rotation.Z <  (M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() > -(M_PI / 18.0f) &&
+                  cEulerAngleZ.GetValue() <  (M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::STRAIGHT;
                   return true;
                }
@@ -1175,9 +1169,11 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z <= -(M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() <= -(M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::RIGHT;
-                  std::cerr << "turn_towards_target: selected right approach, Rot(Z) is " << s_block.Rotation.Z << std::endl;
+                  std::cerr << "turn_towards_target: selected right approach, Rot(Z) is " << cEulerAngleZ.GetValue() << std::endl;
                   return true;
                }
             }                
@@ -1195,9 +1191,11 @@ public:
             const SBlock& s_block = itTarget->Observations.front();
             if(s_block.Tags.front().Center.first > (0.475f * 640.0f) && 
                s_block.Tags.front().Center.first < (0.525f * 640.0f)) {
-               if(s_block.Rotation.Z >= (M_PI / 18.0f)) {
+               argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
+               s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
+               if(cEulerAngleZ.GetValue() >= (M_PI / 18.0f)) {
                   m_eApproachDirection = EApproachDirection::LEFT;
-                  std::cerr << "turn_towards_target: selected left approach, Rot(Z) is " << s_block.Rotation.Z << std::endl;
+                  std::cerr << "turn_towards_target: selected left approach, Rot(Z) is " << cEulerAngleZ.GetValue() << std::endl;
                   return true;
                }
             }
@@ -1233,7 +1231,7 @@ public:
          }
          else {
             const SBlock& s_block = itTargetWithMostQ4Leds->Observations.front();
-            if(s_block.Translation.Z < 0.11) {
+            if(s_block.Translation.GetZ() < 0.11) {
                return true;
             }
          }
@@ -1254,7 +1252,7 @@ public:
          }
          else {
             const SBlock& s_block = itTargetWithMostQ4Leds->Observations.front();
-            if(s_block.Translation.Z < 0.11) {
+            if(s_block.Translation.GetZ() < 0.11) {
                return true;
             }
          }
@@ -1275,7 +1273,7 @@ public:
          }
          else {
             const SBlock& s_block = itTargetWithMostQ4Leds->Observations.front();
-            if(s_block.Translation.Z < 0.11) {
+            if(s_block.Translation.GetZ() < 0.11) {
                return true;
             }
          }
