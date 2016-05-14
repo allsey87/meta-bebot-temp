@@ -76,13 +76,14 @@ const std::string CBlockDemo::m_strIntro =
 
 const std::string CBlockDemo::m_strUsage =
    "Usage:\n"
-   "  blocktracker [OPTION...]\n"
+   "  blocktracker [OPTION]...\n"
    "\n"
    "Options:\n"
    "  -h -?              Show help options\n"
    "  -a                 Annotate images\n"
    "  -r <host:port>     Send images via TCP to remote host\n"
-   "  -s <path/prefix>   Save images to folder with prefix\n";
+   "  -s <path/prefix>   Save images to folder with prefix\n"
+   "  -v                 Verbose mode\n";
 
 /****************************************/
 /****************************************/
