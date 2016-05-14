@@ -32,10 +32,13 @@ either expressed or implied, of the FreeBSD Project.
 #ifndef _HOMOGRAPHY_H
 #define _HOMOGRAPHY_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // correspondences is a list of float[4]s, consisting of the points x
 // and y concatenated. We will compute a homography such that y = Hx
 // Specifically, float [] { a, b, c, d } where x = [a b], y = [c d].
-
 
 #define HOMOGRAPHY_COMPUTE_FLAG_INVERSE 1
 #define HOMOGRAPHY_COMPUTE_FLAG_SVD 0
@@ -89,5 +92,9 @@ matd_t *homography_to_pose(const matd_t *H, double fx, double fy, double cx, dou
 // [ 0  0 -1  0 ]
 
 matd_t *homography_to_model_view(const matd_t *H, double F, double G, double A, double B, double C, double D);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
