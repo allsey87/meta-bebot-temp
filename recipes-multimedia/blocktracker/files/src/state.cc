@@ -37,14 +37,15 @@ CState::CState(const CState& c_state_other) :
    
    /* Copy and validate the transitions */
    for(const STransition& s_transition : c_state_other.m_vecTransitions) {
-      std::string strFromStateId, strToStateId;
-      if(s_transition.FromState != std::end(c_state_other.m_vecSubStates)) {
-         strFromStateId = s_transition.FromState->m_strId;
+      if(s_transition.ToState == std::end(c_state_other.m_vecSubStates)) {
+         AddExitTransition(s_transition.FromState->m_strId,
+                           s_transition.Guard);
       }
-      if(s_transition.ToState != std::end(c_state_other.m_vecSubStates)) {
-         strToStateId = s_transition.ToState->m_strId;
+      else {
+         AddTransition(s_transition.FromState->m_strId,
+                       s_transition.ToState->m_strId,
+                       s_transition.Guard);
       }
-      AddTransition(strFromStateId, strToStateId, s_transition.Guard);
    }
 }
 
@@ -84,15 +85,17 @@ void CState::AddTransition(std::string str_from_state,
                            std::string str_to_state,
                            std::function<bool()> fn_guard) {
                    
-   std::vector<CState>::iterator itFromState = 
-      std::find_if(std::begin(m_vecSubStates), std::end(m_vecSubStates), [&str_from_state] (const CState& c_state) {
-         return (c_state.m_strId == str_from_state);
-      });
+   std::vector<CState>::iterator itFromState = std::find_if(std::begin(m_vecSubStates),
+                                                            std::end(m_vecSubStates),
+                                                            [&str_from_state] (const CState& c_state) {
+      return (c_state.m_strId == str_from_state);
+   });
 
-   std::vector<CState>::iterator itToState = 
-      std::find_if(std::begin(m_vecSubStates), std::end(m_vecSubStates), [&str_to_state] (const CState& c_state) {
-         return (c_state.m_strId == str_to_state);
-      });
+   std::vector<CState>::iterator itToState = std::find_if(std::begin(m_vecSubStates),
+                                                          std::end(m_vecSubStates),
+                                                          [&str_to_state] (const CState& c_state) {
+      return (c_state.m_strId == str_to_state);
+   });
 
    if(itFromState != std::end(m_vecSubStates)) {
       if(itToState != std::end(m_vecSubStates)) {
@@ -105,7 +108,6 @@ void CState::AddTransition(std::string str_from_state,
    else {
       throw std::invalid_argument(str_from_state + " doesn't exist in " + m_strId);
    }
-
 }
 
 /***********************************************************/
@@ -114,10 +116,11 @@ void CState::AddTransition(std::string str_from_state,
 void CState::AddExitTransition(std::string str_from_state,
                                std::function<bool()> fn_guard) {
                    
-   std::vector<CState>::iterator itFromState = 
-      std::find_if(std::begin(m_vecSubStates), std::end(m_vecSubStates), [&str_from_state] (const CState& c_state) {
-         return (c_state.m_strId == str_from_state);
-      });
+   std::vector<CState>::iterator itFromState = std::find_if(std::begin(m_vecSubStates),
+                                                            std::end(m_vecSubStates),
+                                                            [&str_from_state] (const CState& c_state) {
+      return (c_state.m_strId == str_from_state);
+   });
 
    if(itFromState != std::end(m_vecSubStates)) {
       m_vecTransitions.push_back( {itFromState, std::end(m_vecSubStates), fn_guard} );
@@ -179,21 +182,3 @@ std::ostream& operator<<(std::ostream& c_stream, const CState& c_state) {
 /***********************************************************/
 /***********************************************************/
 
-/*
-std::ostream& operator<<(std::ostream& c_stream, const CState& c_state) {
-   c_stream << c_state.m_strId 
-          << (c_state.m_itCurrentSubState != std::end(c_state.m_vecSubStates) ? "*" : "")
-          << "{";
-   for(std::vector<CState>::const_iterator it_state = std::begin(c_state.m_vecSubStates);
-       it_state != std::end(c_state.m_vecSubStates);
-       it_state++) {
-      c_stream << *it_state;
-      if(std::next(it_state) != std::end(c_state.m_vecSubStates)) {
-         c_stream << ", ";
-      }
-   }
-   c_stream << "}";
-   return c_stream;
-}
-*/
-   

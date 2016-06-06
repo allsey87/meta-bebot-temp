@@ -433,10 +433,7 @@ public:
                                             });
                if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
                   const SBlock& s_block = itTarget->Observations.front();            
-                                                                     
                   TrackBlockViaManipulatorHeight(s_block, MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 2u);
-                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
-
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
                   if(fTagXOffset < 0) {
                      m_psActuatorData->DifferentialDriveSystem.Left.Velocity = BASE_VELOCITY;
@@ -461,16 +458,10 @@ public:
                                          
                if(itTarget != std::end(m_psSensorData->ImageSensor.Detections.Targets)) {
                   const SBlock& s_block = itTarget->Observations.front();
-                 
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
                   float fTagXOffsetTarget = 0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
-                  
-                  std::cerr << "fTagXOffsetTarget = " << fTagXOffsetTarget << std::endl;
-                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
-
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
-                  fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
-                                                    
+                  fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;               
                   TrackBlockViaManipulatorHeight(s_block, MTT_LIFT_ACTUATOR_OFFSET_HEIGHT + 2u);
                }
                m_psActuatorData->DifferentialDriveSystem.Left.Velocity = std::round(fLeft);
@@ -492,10 +483,6 @@ public:
                  
                   float fTagXOffset = (s_block.Tags.front().Center.first - 320.0f) / 320.0f;
                   float fTagXOffsetTarget = -0.975f * std::abs((s_block.Translation.GetZ() - 0.1f) / 0.25f);
-                  
-                  std::cerr << "fTagXOffsetTarget = " << fTagXOffsetTarget << std::endl;
-                  std::cerr << "s_block.Translation.GetZ() = " << s_block.Translation.GetZ() << std::endl;
-
                   fRight = (1 + fTagXOffsetTarget - fTagXOffset) * BASE_VELOCITY;
                   fLeft  = (1 + fTagXOffset - fTagXOffsetTarget) * BASE_VELOCITY;
                                                                      

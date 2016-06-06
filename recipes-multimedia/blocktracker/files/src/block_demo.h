@@ -5,7 +5,9 @@
 #include <list>
 #include <deque>
 
+#include "structure.h"
 #include "target.h"
+#include "block.h"
 #include "image_processing_pipeline.h"
 
 #include <apriltag/image_u8.h>
@@ -93,7 +95,8 @@ public:
    struct SSensorData {
       struct {
          struct {
-            std::list<STarget> Targets;
+            STarget::TList Targets;
+            SStructure::TList Structures;
          } Detections;
       } ImageSensor;
       struct {
@@ -126,10 +129,6 @@ public:
             int16_t Velocity = 0;
             bool UpdateReq = false;
          } Left, Right;
-         struct {
-            bool Enable = false;
-            bool UpdateReq = false;
-         } Power;
       } DifferentialDriveSystem;
       struct {
          std::array<EColor, 12> Color;

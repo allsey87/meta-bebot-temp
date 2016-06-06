@@ -31,16 +31,18 @@ public:
                           std::function<bool()> fn_guard = [] { return true; });
       
    bool Step();   
-      
+   
+   friend std::ostream& operator<<(std::ostream& c_stream, const CState& c_state);
+
+private:
+   /* definition of a transition */
    struct STransition {
       std::vector<CState>::iterator FromState;
       std::vector<CState>::iterator ToState;
       std::function<bool()> Guard;
    };
-   
-   friend std::ostream& operator<<(std::ostream& c_stream, const CState& c_state);
 
-private:     
+private:
    /* state name */
    std::string m_strId;
    /* entry and exit methods */

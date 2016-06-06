@@ -33,14 +33,16 @@
 #include "tcp_image_socket.h"
 
 //#include "qualitative_stigmergy_test.h"
-//#include "quantitative_stigmergy_test.h"
+#include "quantitative_stigmergy_test.h"
+
+const std::string INDENT = "   ";
 
 /****************************************/
 /****************************************/
 
 volatile bool bShutdownSignal = false;
 
-void InteruptSignalHandler(int n_unused) {
+void InterruptSignalHandler(int n_unused) {
    bShutdownSignal = true;
 }
 
@@ -49,7 +51,7 @@ void InteruptSignalHandler(int n_unused) {
 
 int main(int n_arg_count, char* ppch_args[]) {
    /* Register the SIGINT handler to shut down system cleanly on abort */
-   std::signal(SIGINT, InteruptSignalHandler);
+   std::signal(SIGINT, InterruptSignalHandler);
    /* Print intro message */
    std::cerr << CBlockDemo::GetIntroString() << std::endl;
    /* Create application */
@@ -67,7 +69,7 @@ int main(int n_arg_count, char* ppch_args[]) {
 /****************************************/
 
 const std::string CBlockDemo::m_strIntro =
-   "Blocktracker Test Application\n"
+   "Blocktracker Test Application (build: " __TIME__ ")\n"
    "2016 University of Paderborn\n"
    "Michael Allwright\n";
 
@@ -252,17 +254,17 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    m_ptrDetectOp->SetEnable(true);
    /* Save (optional) */
    if(m_bSaveEnable) {
-      m_ptrSaveOp = std::make_shared<CAsyncSaveOp>(m_strImageSavePath, 2u, 0u, 0u, m_tExperimentStart);
+      m_ptrSaveOp = std::make_shared<CAsyncSaveOp>(m_strImageSavePath, 1u, 0u, 0u, m_tExperimentStart);
       m_ptrSaveOp->SetEnable(true);
    }
    /* Annotate (optional) */
    if(m_bAnnotateEnable) {
-      m_ptrAnnotateOp = std::make_shared<CAsyncAnnotateOp>(4u);
+      m_ptrAnnotateOp = std::make_shared<CAsyncAnnotateOp>(2u);
       m_ptrAnnotateOp->SetEnable(true);
    }
    /* Stream (optional) */
    if(m_bStreamEnable) {
-      m_ptrStreamOp = std::make_shared<CAsyncStreamOp>(m_pcTCPImageSocket, 4u);
+      m_ptrStreamOp = std::make_shared<CAsyncStreamOp>(m_pcTCPImageSocket, 2u);
       m_ptrStreamOp->SetEnable(true);
    }
 
@@ -288,9 +290,12 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
    m_psActuatorData = new SActuatorData;
-  
+   /* Update the global data struct */
+   Data.Sensors = m_psSensorData;
+   Data.Actuators = m_psActuatorData;
+
    /* Create the task */
-   //m_pcManipulatorTestingTask = new CManipulatorTestingTask(m_psSensorData, m_psActuatorData);
+   m_pcManipulatorTestingTask = new CManipulatorTestingTask();
 
    /* Initialisation was successful */
    return 0;
@@ -378,14 +383,18 @@ void CBlockDemo::Exec() {
 
    /* list for storing the detected blocks, targets and stuctures */
    SBlock::TList tDetectedBlockList;
-   STarget::TList tTrackedTargetList;
-   SStructure::TList tStructureList;
+   STarget::TList& tTrackedTargetList = m_psSensorData->ImageSensor.Detections.Targets;
+   SStructure::TList& tStructureList = m_psSensorData->ImageSensor.Detections.Structures;
+
+   /* debugging strings */
+   std::string strLastStateInfo = "top_level_state";
+   std::string strLastTrackingInfo = "()";
    
    for(;;) {
       /* regulate the control tick rate to 150ms */
       for(;;) {
          std::chrono::time_point<std::chrono::steady_clock> tNow = std::chrono::steady_clock::now();
-         if(std::chrono::duration<float>(tNow - tLastTick) > std::chrono::milliseconds(150)) {
+         if(std::chrono::duration<double>(tNow - tLastTick) > std::chrono::milliseconds(150)) {
             tLastTick = tNow;
             break;
          }
@@ -404,11 +413,11 @@ void CBlockDemo::Exec() {
       while(m_ptrDetectOp->HasDetectedBlocks()) {
          /* Get the detected blocks from the pipeline */
          m_ptrDetectOp->GetDetectedBlocks(tDetectedBlockList, tpDetectionTimestamp);
+         auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tExperimentStart).count();
          /* Associate detections to a set of targets */
          m_pcBlockTracker->AssociateAndTrackTargets(tpDetectionTimestamp, tDetectedBlockList, tTrackedTargetList);
          /* Detect structures */         
-         m_pcStructureAnalyser->DetectStructures(tTrackedTargetList, tStructureList);
-         
+         m_pcStructureAnalyser->DetectStructures(tTrackedTargetList, tStructureList);        
          /* annotate images if enabled */
          if(m_bAnnotateEnable) {
             std::shared_ptr<image_u8_t> ptrBuffer;
@@ -503,9 +512,9 @@ void CBlockDemo::Exec() {
                      (punPacketData[2] << 8) | punPacketData[3];
                   m_psSensorData->ManipulatorModule.RangeFinders.Right =
                      (punPacketData[4] << 8) | punPacketData[5];
-                  m_psSensorData->ManipulatorModule.RangeFinders.Front =
-                     (punPacketData[6] << 8) | punPacketData[7];
                   m_psSensorData->ManipulatorModule.RangeFinders.Underneath =
+                     (punPacketData[6] << 8) | punPacketData[7];
+                  m_psSensorData->ManipulatorModule.RangeFinders.Front =
                      (punPacketData[8] << 8) | punPacketData[9];
                   bWaitingForRfResponse = false;
                }
@@ -525,15 +534,40 @@ void CBlockDemo::Exec() {
       }
       
       /* Store the experiment timer and the control tick counter */
-      m_psSensorData->Clock.Time = std::chrono::duration<float>(tLastTick - m_tExperimentStart).count();
+      m_psSensorData->Clock.Time = std::chrono::duration<double>(tLastTick - m_tExperimentStart).count();
       m_psSensorData->Clock.Ticks = unControlTick;
 
-      /******** STEP THE TASK ********/
-      bool bTaskIsComplete = false;//m_pcManipulatorTestingTask->Step();
+      auto nFrameIdx = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tExperimentStart).count();
 
-      /* Output the current state of the state machine */
-      //std::cerr << "[Task] " << *m_pcManipulatorTestingTask << std::endl;
-       
+      std::ostringstream cTrackingInfo;
+      for(STarget& s_target : tTrackedTargetList) {
+         if(s_target.Id == Data.TrackedTargetId) {
+            cTrackingInfo << ('(' + std::to_string(s_target.Id) + ')');
+         }
+         else {
+            cTrackingInfo << std::to_string(s_target.Id);
+         }
+         cTrackingInfo << ' ';
+      }
+      if(cTrackingInfo.str() != strLastTrackingInfo) {
+         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " tracking Status:" << std::endl
+                   << INDENT << ((cTrackingInfo.str() == "") ? std::string("()") : cTrackingInfo.str()) << std::endl;
+         strLastTrackingInfo = cTrackingInfo.str();
+      }
+
+      /******** STEP THE TASK ********/
+      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
+
+      /* Output the current state of the state machine if a transition occurred */
+      std::ostringstream cStateInfo;
+      cStateInfo << *m_pcManipulatorTestingTask;
+      if(cStateInfo.str() != strLastStateInfo) {
+         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " transition:" << std::endl
+                   << INDENT << strLastStateInfo << " =>" << std::endl
+                   << INDENT << cStateInfo.str() << std::endl;
+         strLastStateInfo = cStateInfo.str();
+      }
+
       /******** UPDATE ACTUATORS ********/
       /* Differential Drive System */
       if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq || 
@@ -557,12 +591,6 @@ void CBlockDemo::Exec() {
          /* clear the update request */
          m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = false;
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = false;
-      }
-      
-      if(m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq) {
-            m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_ENABLE, 
-                                                    m_psActuatorData->DifferentialDriveSystem.Power.Enable);
-         m_psActuatorData->DifferentialDriveSystem.Power.UpdateReq = false;
       }
 
       /* LED Deck */
@@ -644,10 +672,10 @@ void CBlockDemo::Exec() {
       }
    }
    
-   float fExperimentRuntime = std::chrono::duration<float>(std::chrono::steady_clock::now() - m_tExperimentStart).count();
+   double fExperimentRuntime = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_tExperimentStart).count();
 
    std::cerr << "Shutdown: experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
-   std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<float>(unControlTick) << " seconds" << std::endl;
+   std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<double>(unControlTick) << " seconds" << std::endl;
 
    /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */
