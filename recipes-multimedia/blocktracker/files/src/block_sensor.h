@@ -28,13 +28,13 @@ public:
    void DetectBlocks(image_u8_t* pt_y_frame,
                      image_u8_t* pt_u_frame,
                      image_u8_t* pt_v_frame,
-                     std::list<SBlock>& lst_blocks);
+                     SBlock::TList& t_block_list);
 
 private:
    void DetectLeds(STag& s_tag, image_u8_t* pt_y_frame, image_u8_t* pt_u_frame, image_u8_t* pt_v_frame);
 
-   void ClusterDetections(std::list<SBlock>& lst_detections,
-                          std::list<SBlock>& lst_blocks);
+   void ClusterDetections(SBlock::TList& t_detection_list,
+                          SBlock::TList& t_block_list);
                           
    /* Apriltag family and detector */
    apriltag_family* m_psTagFamily;
@@ -59,6 +59,7 @@ private:
       cv::Point3d(-m_fTagSize * 0.5f,  m_fTagSize * 0.5f, 0),
    };
 
+   /* center of the block */
    const std::vector<cv::Point3d> m_vecOriginPts = {
       cv::Point3d(0.0f,0.0f, 0.0f)
    };
@@ -71,7 +72,7 @@ private:
       cv::Point3d( 0,  m_fInterLedLength * 0.5f, 0)
    };
 
-   const argos::CRange<argos::CRadians> m_cBlockZRotationRange = 
+   const argos::CRange<argos::CRadians> m_cBlockRotationRange = 
       argos::CRange<argos::CRadians>(-argos::CRadians::PI_OVER_FOUR, argos::CRadians::PI_OVER_FOUR);
 
    /* camera matrix */

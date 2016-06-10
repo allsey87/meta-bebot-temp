@@ -164,10 +164,10 @@ public:
       std::unique_lock<std::mutex> lckDetectionLists(m_mtxDetectionLists);
       return ((m_lstDetectedBlocks.size() > 0) && (m_lstDetectionTimestamps.size() > 0));
    }   
-   void GetDetectedBlocks(std::list<SBlock>& s_block_list, std::chrono::time_point<std::chrono::steady_clock>& t_timestamp) {
+   void GetDetectedBlocks(SBlock::TList& t_block_list, std::chrono::time_point<std::chrono::steady_clock>& t_timestamp) {
       std::unique_lock<std::mutex> lckDetectionLists(m_mtxDetectionLists);
       if((m_lstDetectedBlocks.size() > 0) && (m_lstDetectionTimestamps.size() > 0)) {
-         s_block_list = std::move(m_lstDetectedBlocks.front());
+         t_block_list = std::move(m_lstDetectedBlocks.front());
          m_lstDetectedBlocks.pop_front();
          t_timestamp = m_lstDetectionTimestamps.front();
          m_lstDetectionTimestamps.pop_front();
@@ -175,7 +175,7 @@ public:
    }
 private:
    void Execute(SBuffer& s_buffer) override {
-      std::list<SBlock> lstBlocks;
+      SBlock::TList lstBlocks;
       m_pcBlockSensor->DetectBlocks(s_buffer.Y.get(), s_buffer.U.get(), s_buffer.V.get(), lstBlocks);
       std::unique_lock<std::mutex> lckDetectionLists(m_mtxDetectionLists);
       m_lstDetectedBlocks.emplace_back(std::move(lstBlocks));
@@ -183,7 +183,7 @@ private:
    }
    CBlockSensor* m_pcBlockSensor;
    std::mutex m_mtxDetectionLists;
-   std::list<std::list<SBlock>> m_lstDetectedBlocks;
+   std::list<SBlock::TList> m_lstDetectedBlocks;
    std::list<std::chrono::time_point<std::chrono::steady_clock>> m_lstDetectionTimestamps;
 };
 

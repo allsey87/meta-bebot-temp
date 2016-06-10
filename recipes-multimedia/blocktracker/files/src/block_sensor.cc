@@ -122,20 +122,30 @@ void CBlockSensor::DetectBlocks(image_u8_t* pt_image_y,
       sBlock.Coordinates.Set(vecBlockCentrePixel[0].x, vecBlockCentrePixel[0].y);
       /* normalise the Z angle of the tag and convert to argos::CVector3 and argos::CQuaternion format */
       argos::CRotationMatrix3 cRotationMatrix;
-      argos::CRadians cBlockEulerAngles[3];
       cv::Rodrigues(sBlock.RotationVector, cv::Mat(3, 3, CV_64F, &cRotationMatrix(0,0)));
-      cRotationMatrix.ToQuaternion().ToEulerAngles(cBlockEulerAngles[0], cBlockEulerAngles[1], cBlockEulerAngles[2]);
-      m_cBlockZRotationRange.WrapValue(cBlockEulerAngles[0]);
-      /* set the argos::CVector3 and argos::CQuaternion */
+      argos::CQuaternion cRotation = cRotationMatrix.ToQuaternion();
+      argos::CRadians cBlockEulerAngles[3];
+      cRotation.ToEulerAngles(cBlockEulerAngles[0], cBlockEulerAngles[1], cBlockEulerAngles[2]);
+      /* TODO: this is a hack  - use proper logic here involving transforms to get to the correct orientation */
+      if(cBlockEulerAngles[2].GetValue() > 0.0f) {
+         argos::CQuaternion cRotX90;
+         cRotX90.FromEulerAngles(argos::CRadians::ZERO, argos::CRadians::ZERO, -argos::CRadians::PI_OVER_TWO);
+         cRotX90 *= cRotation;
+         /* for reasons involving magic and fairy dust, switching the Z and Y angle and negating some stuff just works */
+         cRotX90.ToEulerAngles(cBlockEulerAngles[1], cBlockEulerAngles[0], cBlockEulerAngles[2]);
+         cBlockEulerAngles[1] = -cBlockEulerAngles[1];
+      }
+      /* wrap the angle into the correct range */
+      for(argos::CRadians& c_angle : cBlockEulerAngles) {
+         m_cBlockRotationRange.WrapValue(c_angle);
+      }
       sBlock.Rotation.FromEulerAngles(cBlockEulerAngles[0], cBlockEulerAngles[1], cBlockEulerAngles[2]);
       sBlock.Translation.Set(sBlock.TranslationVector(0), sBlock.TranslationVector(1), sBlock.TranslationVector(2));
       /* store the block into our block list */
       t_detections_list.push_back(sBlock);
    }
-   
    /* clean up */
    apriltag_detections_destroy(psDetections);
-   
    /* cluster the blocks */
    ClusterDetections(t_detections_list, t_block_list);
 }
