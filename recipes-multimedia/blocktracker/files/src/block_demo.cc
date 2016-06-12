@@ -69,7 +69,7 @@ int main(int n_arg_count, char* ppch_args[]) {
 /****************************************/
 
 const std::string CBlockDemo::m_strIntro =
-   "Blocktracker Test Application (build: " __TIME__ ")\n"
+   "Blocktracker Test Application (build: " __TIME__ ", " __DATE__ ")\n"
    "2016 University of Paderborn\n"
    "Michael Allwright\n";
 
@@ -657,7 +657,7 @@ void CBlockDemo::Exec() {
       /* Gripper */
       if(m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq) {
          /* Data for transfer */
-         const EGripperFieldMode& eGripperFieldMode = m_psActuatorData->ManipulatorModule.EndEffector.FieldMode;
+         EGripperFieldMode eGripperFieldMode = m_psActuatorData->ManipulatorModule.EndEffector.FieldMode;
          /* Send data in a packet to the sensor/actuator interface */
          m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                               static_cast<const uint8_t>(eGripperFieldMode));

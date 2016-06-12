@@ -576,7 +576,7 @@ public:
       /* search_for_target transitions */
       (*this)["search_for_unused_block"].AddTransition("set_search_velocity","wait_for_next_target");
       (*this)["search_for_unused_block"].AddTransition("wait_for_next_target", "turn_towards_target", [this] {
-          std::list<STarget>::iterator itTrackedTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+          STarget::TListIterator itTrackedTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                                                       std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                                                       [this] (const STarget& s_target) {
                                                                          return (s_target.Id != m_unTrackedTargetId);
@@ -1005,7 +1005,7 @@ public:
                m_unTrackedTargetId = itTargetWithMostQ4Leds->Id;
             }
          }
-         std::list<STarget>::iterator itTrackedTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
+         STarget::TListIterator itTrackedTarget = std::find_if(std::begin(m_psSensorData->ImageSensor.Detections.Targets),
                                                                      std::end(m_psSensorData->ImageSensor.Detections.Targets),
                                                                      [this] (const STarget& s_target) {
                                                                         return (s_target.Id != m_unTrackedTargetId);
@@ -1340,10 +1340,10 @@ private:
    }
    
    
-   std::list<STarget>::const_iterator FindTargetWithMostQ4Leds(const std::list<STarget>& s_target_list) {
-      std::list<STarget>::const_iterator itTargetWithMostQ4Leds = std::end(s_target_list);
+   STarget::TList::const_iterator FindTargetWithMostQ4Leds(const STarget::TList& s_target_list) {
+      STarget::TList::const_iterator itTargetWithMostQ4Leds = std::end(s_target_list);
       unsigned int unTargetWithMostQ4LedsCount = 0;      
-      for(std::list<STarget>::const_iterator it_target = std::begin(s_target_list);
+      for(STarget::TList::const_iterator it_target = std::begin(s_target_list);
          it_target != std::end(s_target_list);
          it_target++) {
          const SBlock& s_block = it_target->Observations.front();
