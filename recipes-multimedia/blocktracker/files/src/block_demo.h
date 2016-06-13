@@ -118,7 +118,8 @@ public:
          } LiftActuator;
       } ManipulatorModule;
       struct {
-         float Time = 0;
+         std::chrono::time_point<std::chrono::steady_clock> ExperimentStart;
+         std::chrono::time_point<std::chrono::steady_clock> Time;
          unsigned int Ticks = 0;
       } Clock;
    };
@@ -182,7 +183,7 @@ private:
    std::shared_ptr<CAsyncSaveOp> m_ptrSaveOp;
    std::shared_ptr<CAsyncStreamOp> m_ptrStreamOp;
 
-   std::chrono::time_point<std::chrono::steady_clock> m_tExperimentStart;
+   std::chrono::time_point<std::chrono::steady_clock> m_tpExperimentStart;
    
    CBlockSensor* m_pcBlockSensor;
    CBlockTracker* m_pcBlockTracker;

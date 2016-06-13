@@ -254,7 +254,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    m_ptrDetectOp->SetEnable(true);
    /* Save (optional) */
    if(m_bSaveEnable) {
-      m_ptrSaveOp = std::make_shared<CAsyncSaveOp>(m_strImageSavePath, 1u, 0u, 0u, m_tExperimentStart);
+      m_ptrSaveOp = std::make_shared<CAsyncSaveOp>(m_strImageSavePath, 1u, 0u, 0u, m_tpExperimentStart);
       m_ptrSaveOp->SetEnable(true);
    }
    /* Annotate (optional) */
@@ -377,7 +377,7 @@ void CBlockDemo::Exec() {
    /* create time point for the last tick */
    std::chrono::time_point<std::chrono::steady_clock> tLastTick;
    /* mark the start time of the experiment */
-   m_tExperimentStart = std::chrono::steady_clock::now();
+   m_tpExperimentStart = std::chrono::steady_clock::now();
    /* Start the async image processing pipeline by enabling the capture operation */
    m_ptrCaptureOp->SetEnable(true);
 
@@ -413,7 +413,7 @@ void CBlockDemo::Exec() {
       while(m_ptrDetectOp->HasDetectedBlocks()) {
          /* Get the detected blocks from the pipeline */
          m_ptrDetectOp->GetDetectedBlocks(tDetectedBlockList, tpDetectionTimestamp);
-         auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tExperimentStart).count();
+         auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tpExperimentStart).count();
          /* Associate detections to a set of targets */
          m_pcBlockTracker->AssociateAndTrackTargets(tpDetectionTimestamp, tDetectedBlockList, tTrackedTargetList);
          /* Detect structures */         
@@ -534,10 +534,11 @@ void CBlockDemo::Exec() {
       }
       
       /* Store the experiment timer and the control tick counter */
-      m_psSensorData->Clock.Time = std::chrono::duration<double>(tLastTick - m_tExperimentStart).count();
+      m_psSensorData->Clock.ExperimentStart = m_tpExperimentStart;
+      m_psSensorData->Clock.Time = tpDetectionTimestamp;
       m_psSensorData->Clock.Ticks = unControlTick;
 
-      auto nFrameIdx = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tExperimentStart).count();
+      auto nFrameIdx = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tpExperimentStart).count();
 
       std::ostringstream cTrackingInfo;
       for(STarget& s_target : tTrackedTargetList) {
@@ -550,7 +551,7 @@ void CBlockDemo::Exec() {
          cTrackingInfo << ' ';
       }
       if(cTrackingInfo.str() != strLastTrackingInfo) {
-         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " tracking Status:" << std::endl
+         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " tracking status:" << std::endl
                    << INDENT << ((cTrackingInfo.str() == "") ? std::string("()") : cTrackingInfo.str()) << std::endl;
          strLastTrackingInfo = cTrackingInfo.str();
       }
@@ -672,7 +673,7 @@ void CBlockDemo::Exec() {
       }
    }
    
-   double fExperimentRuntime = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_tExperimentStart).count();
+   double fExperimentRuntime = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_tpExperimentStart).count();
 
    std::cerr << "Shutdown: experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
    std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<double>(unControlTick) << " seconds" << std::endl;
