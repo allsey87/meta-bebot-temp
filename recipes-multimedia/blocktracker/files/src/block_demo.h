@@ -26,7 +26,7 @@ class CLED;
 
 class CBlockDemo {
 public:
-   
+
    CBlockDemo() :
       m_bAnnotateEnable(false),
       m_bSaveEnable(false),
@@ -38,31 +38,31 @@ public:
       m_pcPowerManagementInterface(nullptr),
       m_pcSensorActuatorInterface(nullptr),
       m_pcManipulatorInterface(nullptr),
-      /* local devices */ 
+      /* local devices */
       m_pcISSCaptureDevice(nullptr),
       m_pcTCPImageSocket(nullptr),
-      /* async pipeline */ 
+      /* async pipeline */
       m_ptrAnnotateOp(nullptr),
       m_ptrCaptureOp(nullptr),
       m_ptrDetectOp(nullptr),
       m_ptrSaveOp(nullptr),
       m_ptrStreamOp(nullptr),
-      /* local algorithms */ 
+      /* local algorithms */
       m_pcBlockSensor(nullptr),
       m_pcBlockTracker(nullptr),
       m_pcStructureAnalyser(nullptr),
       m_pcFrameAnnotator(nullptr) {}
-   
+
    static const std::string& GetUsageString() {
       return m_strUsage;
    }
 
    static const std::string& GetIntroString() {
       return m_strIntro;
-   } 
-   
-   int Init(int n_arg_count, char* pch_args[]); 
-   
+   }
+
+   int Init(int n_arg_count, char* pch_args[]);
+
    void Exec();
 
    /* to implement */
@@ -74,7 +74,7 @@ public:
       DESTRUCTIVE = 1,
       DISABLED = 2
    };
-   
+
    enum class ELiftActuatorSystemState : uint8_t {
       /* Inactive means the stepper motor is disabled */
       INACTIVE = 0,
@@ -84,10 +84,10 @@ public:
       /* Calibration search bottom/top */
       CALIBRATION_SRCH_TOP = 3,
       CALIBRATION_SRCH_BTM = 4,
-      /* Not actually a state */ 
+      /* Not actually a state */
       UNDEFINED = 5,
    };
-   
+
    enum class EColor {
       RED, GREEN, BLUE
    };
@@ -164,19 +164,19 @@ private:
    bool m_bStreamEnable;
 
    bool m_bVerboseOutput;
-   
+
    std::string m_strImageSavePath;
    std::string m_strRemoteHost;
 
    CPacketControlInterface* m_pcPowerManagementInterface;
    CPacketControlInterface* m_pcSensorActuatorInterface;
    CPacketControlInterface* m_pcManipulatorInterface;
-   
+
    std::vector<CLED> m_vecLEDs;
 
    CISSCaptureDevice* m_pcISSCaptureDevice;
    CTCPImageSocket* m_pcTCPImageSocket;
-   
+
    std::shared_ptr<CAsyncAnnotateOp> m_ptrAnnotateOp;
    std::shared_ptr<CAsyncCaptureOp> m_ptrCaptureOp;
    std::shared_ptr<CAsyncDetectOp> m_ptrDetectOp;
@@ -184,12 +184,12 @@ private:
    std::shared_ptr<CAsyncStreamOp> m_ptrStreamOp;
 
    std::chrono::time_point<std::chrono::steady_clock> m_tpExperimentStart;
-   
+
    CBlockSensor* m_pcBlockSensor;
    CBlockTracker* m_pcBlockTracker;
    CStructureAnalyser* m_pcStructureAnalyser;
    CFrameAnnotator* m_pcFrameAnnotator;
-   
+
    SSensorData* m_psSensorData;
    SActuatorData* m_psActuatorData;
    CManipulatorTestingTask* m_pcManipulatorTestingTask;
@@ -199,8 +199,8 @@ private:
 
 private:
    /* camera focal length in pixels */
-   const double m_fFx =  8.8396142504070610e+02; 
-   const double m_fFy =  8.8396142504070610e+02; 
+   const double m_fFx =  8.8396142504070610e+02;
+   const double m_fFy =  8.8396142504070610e+02;
    /* camera principal point */
    const double m_fPx =  3.1950000000000000e+02;
    const double m_fPy =  1.7950000000000000e+02;
@@ -209,7 +209,7 @@ private:
    const double m_fK2 =  1.6727474183089033e-01;
    const double m_fK3 = -1.5480889084966631e+00;
    /* camera matrix */
-   const cv::Matx<double, 3, 3> m_cCameraMatrix = 
+   const cv::Matx<double, 3, 3> m_cCameraMatrix =
       cv::Matx<double, 3, 3>(m_fFx, 0.0f, m_fPx,
                              0.0f, m_fFy, m_fPy,
                              0.0f,  0.0f,  1.0f);

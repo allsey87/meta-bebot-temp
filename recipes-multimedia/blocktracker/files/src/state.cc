@@ -66,6 +66,14 @@ CState& CState::operator[](const std::string& str_id) {
 
 /***********************************************************/
 /***********************************************************/
+
+CState& CState::GetSubState(const std::string& str_id) {
+   return this->operator[](str_id);
+}
+
+
+/***********************************************************/
+/***********************************************************/
      
 void CState::SetEntryFunction(std::function<void()> fn_entry_method) {
    m_fnEntryMethod = fn_entry_method;

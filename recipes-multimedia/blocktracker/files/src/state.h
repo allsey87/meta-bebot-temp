@@ -18,6 +18,8 @@ public:
    CState(const CState& s_state_other);
 
    CState& operator[](const std::string& str_id);
+
+   CState& GetSubState(const std::string& str_id);
         
    void SetEntryFunction(std::function<void()> fn_entry_method);
    

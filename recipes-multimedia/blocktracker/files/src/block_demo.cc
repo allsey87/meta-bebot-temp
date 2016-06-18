@@ -90,10 +90,10 @@ const std::string CBlockDemo::m_strUsage =
 /****************************************/
 /****************************************/
 
-int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {  
+int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    /* Parse command line arguments */
    int c;
-   while ((c = ::getopt(n_arg_count, ppch_args, "avr:s:")) != -1) {     
+   while ((c = ::getopt(n_arg_count, ppch_args, "avr:s:")) != -1) {
       switch (c) {
       case 'a':
          m_bAnnotateEnable = true;
@@ -108,7 +108,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
          break;
       case 'v':
          m_bVerboseOutput = true;
-         break;   
+         break;
       default:
          std::cerr << CBlockDemo::GetUsageString() << std::endl;
          return -EINVAL;
@@ -137,7 +137,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
       uint32_t unUptime = 0;
       pcInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_UPTIME);
       uint8_t unAttempts = 3;
-      while(unAttempts > 0) {     
+      while(unAttempts > 0) {
          if(pcInterface->WaitForPacket(1000, 5)) {
             const CPacketControlInterface::CPacket& cPacket = pcInterface->GetPacket();
             if(cPacket.GetType() == CPacketControlInterface::CPacket::EType::GET_UPTIME) {
@@ -187,7 +187,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    else {
       std::cerr << "Warning: Could not read manipulator battery level" << std::endl;
    }
- 
+
    /* connect to the remote host for image streaming */
    if(m_bStreamEnable) {
       /* find the hostname port number seperator */
@@ -213,7 +213,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    if (stat("/dev/media0", &buf) != 0) {
       std::cerr << "Error" << std::endl << "/dev/media0 does not exist" << std::endl;
       return -ENODEV;
-   }  
+   }
    /* TODO: use the actual media-ctl API and integrate these commands into the ISS capture class */
    ::system("media-ctl -r -l '\"OMAP4 ISS CSI2a\":1 -> \"OMAP4 ISS CSI2a output\":0 [1]'");
    ::system("media-ctl -V '\"ov5640 3-003c\":0 [UYVY 1280x720]','\"OMAP4 ISS CSI2a\":0 [UYVY 1280x720]'");
@@ -227,7 +227,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    else {
       std::cerr << "OK" << std::endl;
    }
-   
+
    /* Link to the LEDs */
    for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_LEDS; un_dev_idx++) {
       m_vecLEDs.emplace_back("/sys/class/leds/", "pca963x:led_deck", un_dev_idx);
@@ -242,7 +242,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    /* Create the image processing pipeline operations */
    /* Capture */
    m_ptrCaptureOp = std::make_shared<CAsyncCaptureOp>(m_pcISSCaptureDevice);
-   /* Inject some empty buffers into the capture operation */   
+   /* Inject some empty buffers into the capture operation */
    std::list<SBuffer> lstBuffers;
    lstBuffers.emplace_back(640u, 360u);
    lstBuffers.emplace_back(640u, 360u);
@@ -286,7 +286,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
          (*it_op)->SetNextOp(lstPipelineOps.front());
       }
    }
-   
+
    /* Create structures for communicating sensor/actuator data with the task */
    m_psSensorData = new SSensorData;
    m_psActuatorData = new SActuatorData;
@@ -330,10 +330,10 @@ void CBlockDemo::Exec() {
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_DISCHARGE_MODE,
                                         static_cast<const uint8_t>(EGripperFieldMode::DISABLED));
    /* Enable charging for the electromagnetic capacitors */
-   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);  
+   m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_EM_CHARGE_ENABLE, true);
    /* Allow the electromagnet capacitors to charge to 50% so that we don't brown out the remote power supply */
    std::cerr << "Charging the electromagnet capacitors: ";
-   while(!bShutdownSignal) {        
+   while(!bShutdownSignal) {
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
       if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
          const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
@@ -389,7 +389,7 @@ void CBlockDemo::Exec() {
    /* debugging strings */
    std::string strLastStateInfo = "top_level_state";
    std::string strLastTrackingInfo = "()";
-   
+
    for(;;) {
       /* regulate the control tick rate to 150ms */
       for(;;) {
@@ -402,7 +402,7 @@ void CBlockDemo::Exec() {
       }
       unControlTick++;
 
-      /******** SAMPLE SENSORS ********/     
+      /******** SAMPLE SENSORS ********/
       std::chrono::time_point<std::chrono::steady_clock> tpDetectionTimestamp;
 
       /* wait for detected blocks */
@@ -416,8 +416,8 @@ void CBlockDemo::Exec() {
          auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(tpDetectionTimestamp - m_tpExperimentStart).count();
          /* Associate detections to a set of targets */
          m_pcBlockTracker->AssociateAndTrackTargets(tpDetectionTimestamp, tDetectedBlockList, tTrackedTargetList);
-         /* Detect structures */         
-         m_pcStructureAnalyser->DetectStructures(tTrackedTargetList, tStructureList);        
+         /* Detect structures */
+         m_pcStructureAnalyser->DetectStructures(tTrackedTargetList, tStructureList);
          /* annotate images if enabled */
          if(m_bAnnotateEnable) {
             std::shared_ptr<image_u8_t> ptrBuffer;
@@ -448,15 +448,19 @@ void CBlockDemo::Exec() {
       bool bWaitingForLiftActuatorPositionResponse = true;
       bool bWaitingForLiftActuatorStateResponse = true;
       bool bWaitingForElectromagnetCharge = true;
-      
+
       /* send requests to sample sensors on the manipulator microcontroller */
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-      while((bWaitingForRfResponse || bWaitingForLiftActuatorStateResponse || 
-             bWaitingForLiftActuatorPositionResponse || bWaitingForElectromagnetCharge) && !bShutdownSignal) {     
+      while((bWaitingForRfResponse || bWaitingForLiftActuatorStateResponse ||
+             bWaitingForLiftActuatorPositionResponse || bWaitingForElectromagnetCharge) && !bShutdownSignal) {
          /* process input on the manipulator interface */
          m_pcManipulatorInterface->ProcessInput();
          if(m_pcManipulatorInterface->GetState() == CPacketControlInterface::EState::RECV_COMMAND) {
@@ -464,7 +468,7 @@ void CBlockDemo::Exec() {
             switch(cPacket.GetType()) {
             case CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE:
                if(cPacket.GetDataLength() == 1) {
-                  const uint8_t* punPacketData = cPacket.GetDataPointer();                
+                  const uint8_t* punPacketData = cPacket.GetDataPointer();
                   m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.push_back(punPacketData[0]);
                   if(m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.size() > 3) {
                      m_psSensorData->ManipulatorModule.LiftActuator.Electromagnets.Charge.pop_front();
@@ -532,7 +536,7 @@ void CBlockDemo::Exec() {
             }
          }
       }
-      
+
       /* Store the experiment timer and the control tick counter */
       m_psSensorData->Clock.ExperimentStart = m_tpExperimentStart;
       m_psSensorData->Clock.Time = tpDetectionTimestamp;
@@ -571,13 +575,17 @@ void CBlockDemo::Exec() {
 
       /******** UPDATE ACTUATORS ********/
       /* Differential Drive System */
-      if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq || 
+      /*
+      if(m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq ||
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq) {
+      */
+      // note: this hack is put in place as occasionally the microcontrollers seem to not receive a message
+      if(true) {
          /* Data for transfer */
          /* TODO this should be swapped on the microcontroller */
          int16_t pnLeftSpeed = -m_psActuatorData->DifferentialDriveSystem.Left.Velocity;
          int16_t pnRightSpeed = -m_psActuatorData->DifferentialDriveSystem.Right.Velocity;
-         
+
          uint8_t punData[] = {
             reinterpret_cast<const uint8_t*>(&pnLeftSpeed)[1],
             reinterpret_cast<const uint8_t*>(&pnLeftSpeed)[0],
@@ -588,7 +596,7 @@ void CBlockDemo::Exec() {
          m_pcSensorActuatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_DDS_SPEED,
                                                  punData,
                                                  sizeof(punData));
-         
+
          /* clear the update request */
          m_psActuatorData->DifferentialDriveSystem.Left.UpdateReq = false;
          m_psActuatorData->DifferentialDriveSystem.Right.UpdateReq = false;
@@ -601,21 +609,21 @@ void CBlockDemo::Exec() {
             case EColor::RED:
                m_vecLEDs.at(unLEDIdx).SetRed(0x15);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
-               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);               
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);
                break;
             case EColor::GREEN:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x15);
-               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);            
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x00);
                break;
             case EColor::BLUE:
                m_vecLEDs.at(unLEDIdx).SetRed(0x00);
                m_vecLEDs.at(unLEDIdx).SetGreen(0x00);
-               m_vecLEDs.at(unLEDIdx).SetBlue(0x15);               
+               m_vecLEDs.at(unLEDIdx).SetBlue(0x15);
                break;
             }
             m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx] = false;
-         }     
+         }
       }
 
       /* Lift Actuator */
@@ -665,18 +673,19 @@ void CBlockDemo::Exec() {
          /* clear the update request */
          m_psActuatorData->ManipulatorModule.EndEffector.UpdateReq = false;
       }
-     
+
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */
       if(bShutdownSignal || bTaskIsComplete) {
-         std::cerr << "Shutdown: request acknowledged" << std::endl;
+         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " shutdown requested:" << std::endl;
          break;
       }
    }
-   
+
    double fExperimentRuntime = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_tpExperimentStart).count();
 
-   std::cerr << "Shutdown: experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
-   std::cerr << "Shutdown: average control tick length was " << fExperimentRuntime / static_cast<double>(unControlTick) << " seconds" << std::endl;
+
+   std::cerr << INDENT << "experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
+   std::cerr << INDENT << "average control tick length was " << fExperimentRuntime / static_cast<double>(unControlTick) << " seconds" << std::endl;
 
    /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */
@@ -703,7 +712,7 @@ void CBlockDemo::Exec() {
    /* Disable actuator input limit override */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
                                             static_cast<const uint8_t>(EActuatorInputLimit::LAUTO));
-   
-   std::cerr << "Shutdown: terminating now" << std::endl;
+
+   std::cerr << INDENT << "terminating" << std::endl;
 }
 
