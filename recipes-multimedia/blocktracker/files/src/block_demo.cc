@@ -394,7 +394,7 @@ void CBlockDemo::Exec() {
       /* regulate the control tick rate to 150ms */
       for(;;) {
          std::chrono::time_point<std::chrono::steady_clock> tNow = std::chrono::steady_clock::now();
-         if(std::chrono::duration<double>(tNow - tLastTick) > std::chrono::milliseconds(150)) {
+         if(std::chrono::duration<double>(tNow - tLastTick) > std::chrono::milliseconds(250)) {
             tLastTick = tNow;
             break;
          }
@@ -676,7 +676,7 @@ void CBlockDemo::Exec() {
 
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */
       if(bShutdownSignal || bTaskIsComplete) {
-         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " shutdown requested:" << std::endl;
+         std::cerr << '\r' << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " shutdown requested:" << std::endl;
          break;
       }
    }
@@ -684,8 +684,8 @@ void CBlockDemo::Exec() {
    double fExperimentRuntime = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_tpExperimentStart).count();
 
 
-   std::cerr << INDENT << "experiment run time was " << fExperimentRuntime << " seconds" << std::endl;
-   std::cerr << INDENT << "average control tick length was " << fExperimentRuntime / static_cast<double>(unControlTick) << " seconds" << std::endl;
+   std::cerr << INDENT << "experiment run time: " << fExperimentRuntime << 's' << std::endl;
+   std::cerr << INDENT << "average control tick length: " << fExperimentRuntime / static_cast<double>(unControlTick) << 's' << std::endl;
 
    /******** SHUTDOWN ROUTINE ********/
    /* Disable the lift actuator */
@@ -713,6 +713,6 @@ void CBlockDemo::Exec() {
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
                                             static_cast<const uint8_t>(EActuatorInputLimit::LAUTO));
 
-   std::cerr << INDENT << "terminating" << std::endl;
+   std::cerr << INDENT << "shutdown" << std::endl;
 }
 
