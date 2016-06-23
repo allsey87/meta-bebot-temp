@@ -21,8 +21,8 @@ class CBlockTracker;
 class CFrameAnnotator;
 class CStructureAnalyser;
 class CISSCaptureDevice;
-class CManipulatorTestingTask;
 class CLED;
+class CFiniteStateMachine;
 
 class CBlockDemo {
 public:
@@ -192,7 +192,7 @@ private:
 
    SSensorData* m_psSensorData;
    SActuatorData* m_psActuatorData;
-   CManipulatorTestingTask* m_pcManipulatorTestingTask;
+   CFiniteStateMachine* m_pcFiniteStateMachine;
 
    const static std::string m_strIntro;
    const static std::string m_strUsage;

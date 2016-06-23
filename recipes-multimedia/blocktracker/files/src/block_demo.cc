@@ -32,8 +32,10 @@
 #include "structure_analyser.h"
 #include "tcp_image_socket.h"
 
-//#include "qualitative_stigmergy_test.h"
-#include "quantitative_stigmergy_test.h"
+//#include "qualitative_stigmergy_experiment.h"
+//#include "quantitative_stigmergy_experiment.h"
+#include "pyramid_experiment.h"
+
 
 const std::string INDENT = "   ";
 
@@ -294,8 +296,8 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    Data.Sensors = m_psSensorData;
    Data.Actuators = m_psActuatorData;
 
-   /* Create the task */
-   m_pcManipulatorTestingTask = new CManipulatorTestingTask();
+   /* Create the finite state machine */
+   m_pcFiniteStateMachine = new CFiniteStateMachine();
 
    /* Initialisation was successful */
    return 0;
@@ -374,14 +376,7 @@ void CBlockDemo::Exec() {
       m_pcISSCaptureDevice->Grab();
    }
 
-   /* create time point for the last tick */
-   std::chrono::time_point<std::chrono::steady_clock> tLastTick;
-   /* mark the start time of the experiment */
-   m_tpExperimentStart = std::chrono::steady_clock::now();
-   /* Start the async image processing pipeline by enabling the capture operation */
-   m_ptrCaptureOp->SetEnable(true);
-
-   /* list for storing the detected blocks, targets and stuctures */
+   /* lists for storing the detected blocks, targets and stuctures */
    SBlock::TList tDetectedBlockList;
    STarget::TList& tTrackedTargetList = m_psSensorData->ImageSensor.Detections.Targets;
    SStructure::TList& tStructureList = m_psSensorData->ImageSensor.Detections.Structures;
@@ -389,6 +384,13 @@ void CBlockDemo::Exec() {
    /* debugging strings */
    std::string strLastStateInfo = "top_level_state";
    std::string strLastTrackingInfo = "()";
+
+   /* create time point for the last tick */
+   std::chrono::time_point<std::chrono::steady_clock> tLastTick;
+   /* mark the start time of the experiment */
+   m_tpExperimentStart = std::chrono::steady_clock::now();
+   /* Start the async image processing pipeline by enabling the capture operation */
+   m_ptrCaptureOp->SetEnable(true);
 
    for(;;) {
       /* regulate the control tick rate to 150ms */
@@ -458,6 +460,8 @@ void CBlockDemo::Exec() {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+      std::chrono::time_point<std::chrono::steady_clock> tManipQueryStart = std::chrono::steady_clock::now();
 
       while((bWaitingForRfResponse || bWaitingForLiftActuatorStateResponse ||
              bWaitingForLiftActuatorPositionResponse || bWaitingForElectromagnetCharge) && !bShutdownSignal) {
@@ -535,6 +539,9 @@ void CBlockDemo::Exec() {
                continue;
             }
          }
+         if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tManipQueryStart).count() > 1000) {
+            std::cerr << "manip not resp" << std::endl;
+         }
       }
 
       /* Store the experiment timer and the control tick counter */
@@ -561,11 +568,11 @@ void CBlockDemo::Exec() {
       }
 
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = m_pcManipulatorTestingTask->Step();
+      bool bTaskIsComplete = m_pcFiniteStateMachine->Step();
 
       /* Output the current state of the state machine if a transition occurred */
       std::ostringstream cStateInfo;
-      cStateInfo << *m_pcManipulatorTestingTask;
+      cStateInfo << *m_pcFiniteStateMachine;
       if(cStateInfo.str() != strLastStateInfo) {
          std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " transition:" << std::endl
                    << INDENT << strLastStateInfo << " =>" << std::endl

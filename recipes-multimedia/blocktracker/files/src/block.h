@@ -46,4 +46,6 @@ struct SBlock {
    cv::Matx31d TranslationVector;
 };
 
+unsigned int GetLedCount(const SBlock& s_block, const std::initializer_list<ELedState>& lst_led_states);
+
 #endif

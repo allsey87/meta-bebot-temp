@@ -21,3 +21,34 @@ std::ostream& operator<<(std::ostream& c_output_stream, ELedState e_led_state) {
    return c_output_stream;
 }
 
+STag::TCoordinateConstIterator FindTagCornerFurthestToTheRight(const STag& s_tag) {
+   return std::max_element(std::begin(s_tag.Corners),
+                           std::end(s_tag.Corners),
+                           [] (const STag::TCoordinate& c_lhs, const STag::TCoordinate& c_rhs) {
+                              return c_lhs.first < c_rhs.first;
+                           });
+}
+
+STag::TCoordinateConstIterator FindTagCornerFurthestToTheLeft(const STag& s_tag) {
+   return std::min_element(std::begin(s_tag.Corners),
+                           std::end(s_tag.Corners),
+                           [] (const STag::TCoordinate& c_lhs, const STag::TCoordinate& c_rhs) {
+                              return c_lhs.first < c_rhs.first;
+                           });
+}
+
+STag::TCoordinateConstIterator FindTagCornerFurthestToTheBottom(const STag& s_tag) {
+   return std::max_element(std::begin(s_tag.Corners),
+                           std::end(s_tag.Corners),
+                           [] (const STag::TCoordinate& c_lhs, const STag::TCoordinate& c_rhs) {
+                              return c_lhs.second < c_rhs.second;
+                           });
+}
+
+STag::TCoordinateConstIterator FindTagCornerFurthestToTheTop(const STag& s_tag) {
+   return std::min_element(std::begin(s_tag.Corners),
+                           std::end(s_tag.Corners),
+                           [] (const STag::TCoordinate& c_lhs, const STag::TCoordinate& c_rhs) {
+                              return c_lhs.second < c_rhs.second;
+                           });
+}

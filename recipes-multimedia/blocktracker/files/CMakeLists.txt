@@ -18,6 +18,7 @@ include_directories("./src/argos3")
 
 # Build the application
 add_executable(blocktracker
+               src/block.cc
                src/block_demo.cc
                src/block_sensor.cc
                src/block_tracker.cc
@@ -27,6 +28,7 @@ add_executable(blocktracker
                src/state.cc
                src/structure_analyser.cc
                src/tag.cc
+               src/target.cc
                src/tcp_image_socket.cc
                src/uart_socket.cc
                src/argos3/core/utility/math/vector3.cpp

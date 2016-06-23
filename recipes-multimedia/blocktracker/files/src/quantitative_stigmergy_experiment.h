@@ -1,8 +1,9 @@
-#ifndef MANIPULATOR_TESTING_TASK_H
-#define MANIPULATOR_TESTING_TASK_H
+#ifndef PYRAMID_EXPERIMENT_H
+#define PYRAMID_EXPERIMENT_H
 
 #include "state.h"
 #include "block_demo.h"
+#include "pid_controller.h"
 
 #include <iostream>
 
@@ -22,7 +23,7 @@
 
 #define OBSERVE_BLOCK_X_TARGET 0.000
 #define OBSERVE_BLOCK_Z_TARGET 0.275
-#define OBSERVE_BLOCK_XZ_THRES 0.025
+#define OBSERVE_BLOCK_XZ_THRES 0.050
 
 #define PREAPPROACH_BLOCK_X_TARGET 0.000
 #define PREAPPROACH_BLOCK_Z_TARGET 0.325
@@ -34,53 +35,6 @@
 
 #define BASE_VELOCITY 30.0
 #define BASE_XZ_GAIN 5.0
-
-class CPIDController {
-public:
-   /* constructor */
-   CPIDController(double f_kp, double f_ki, double f_kd) :
-      m_fKp(f_kp),
-      m_fKi(f_ki),
-      m_fKd(f_kd),
-      m_fSat(0.200),
-      m_bResetReq(true) {}
-   /* step the controller */
-   double Step(double f_input, double f_target, std::chrono::steady_clock::time_point tp_tick) {
-      if(m_bResetReq) {
-         m_fLastError = f_target - f_input;
-         m_fErrorAccumulated = 0.000;
-         m_tpLastTick = tp_tick;
-         m_bResetReq = false;
-         //std::cout << "input,target,error,error_derivative,error_accumulated,output" << std::endl;
-         return 0.000;
-      }
-      else {
-         std::chrono::duration<double> tDelta = tp_tick - m_tpLastTick;
-         double fError = f_target - f_input;
-         double fErrorDerivative = (fError - m_fLastError) / tDelta.count();
-         m_fErrorAccumulated += fError * tDelta.count();
-         /* saturate the accumulated error at m_fSat */
-         m_fErrorAccumulated = (m_fErrorAccumulated > m_fSat) ? m_fSat : ((m_fErrorAccumulated < -m_fSat) ? -m_fSat : m_fErrorAccumulated);
-         /* calculate the output value */
-         double fOutput = (m_fKp * fError) +
-                          (m_fKi * m_fErrorAccumulated) +
-                          (m_fKd * fErrorDerivative);
-         //std::cout << f_input << "," << f_target << "," << fError << "," << fErrorDerivative << "," << m_fErrorAccumulated << "," << fOutput << std::endl;
-         m_fLastError = fError;
-         m_tpLastTick = tp_tick;
-         return fOutput;
-      }
-   }
-   /* request controller reset */
-   void Reset() {
-      m_bResetReq = true;
-   }
-private:
-   bool m_bResetReq;
-   const double m_fKp, m_fKi, m_fKd, m_fSat;
-   double m_fLastError, m_fErrorAccumulated;
-   std::chrono::steady_clock::time_point m_tpLastTick;
-};
 
 /************************************************************/
 /*               Shared data for all states                 */
@@ -103,6 +57,7 @@ struct {
    std::chrono::time_point<std::chrono::steady_clock> NearApproachStartTime;
    /* data specific to quantitative stigmergy demo */
    std::list<unsigned int> FoundStructureSizes;
+   std::list<unsigned int> InspectedTargets;
 } Data;
 
 
@@ -110,70 +65,10 @@ struct {
 /*            Common functions for all states               */
 /************************************************************/
 
-/**************** functions for locating targets ****************/
-STarget::TConstListIterator FindTargetWithMostQ4Leds(const STarget::TList& s_target_list) {
-   STarget::TConstListIterator itTargetWithMostQ4Leds = std::end(s_target_list);
-   unsigned int unTargetWithMostQ4LedsCount = 0;
-   for(STarget::TConstListIterator it_target = std::begin(s_target_list);
-      it_target != std::end(s_target_list);
-      it_target++) {
-      const SBlock& s_block = it_target->Observations.front();
-      unsigned int unTargetQ4Leds = 0;
-      for(ELedState e_led_state : s_block.Tags.front().DetectedLeds) {
-         unTargetQ4Leds += (e_led_state == ELedState::Q4) ? 1 : 0;
-      }
-      for(const STag& s_tag : s_block.HackTags) {
-         for(ELedState e_led_state : s_tag.DetectedLeds) {
-            unTargetQ4Leds += (e_led_state == ELedState::Q4) ? 1 : 0;
-         }
-      }
-      if(unTargetQ4Leds > unTargetWithMostQ4LedsCount) {
-         unTargetWithMostQ4LedsCount = unTargetQ4Leds;
-         itTargetWithMostQ4Leds = it_target;
-      }
-   }
-   return itTargetWithMostQ4Leds;
-}
-
-STarget::TConstListIterator FindTargetFurthestToTheLeft(const STarget::TList& s_target_list) {
-   STarget::TConstListIterator itTargetFurthestToTheLeft = std::begin(s_target_list);
-   for(STarget::TConstListIterator it_target = std::begin(s_target_list);
-      it_target != std::end(s_target_list);
-      it_target++) {
-      if(it_target->Observations.front().Translation.GetX() <
-         itTargetFurthestToTheLeft->Observations.front().Translation.GetX()) {
-         itTargetFurthestToTheLeft = it_target;
-      }
-   }
-   return itTargetFurthestToTheLeft;
-}
-
-STarget::TConstListIterator FindTargetFurthestToTheRight(const STarget::TList& s_target_list) {
-   STarget::TConstListIterator itTargetFurthestToTheRight = std::begin(s_target_list);
-   for(STarget::TConstListIterator it_target = std::begin(s_target_list);
-      it_target != std::end(s_target_list);
-      it_target++) {
-      if(it_target->Observations.front().Translation.GetX() >
-         itTargetFurthestToTheRight->Observations.front().Translation.GetX()) {
-         itTargetFurthestToTheRight = it_target;
-      }
-   }
-   return itTargetFurthestToTheRight;
-}
-
-STarget::TConstListIterator FindTrackedTarget(unsigned int un_target_id, const STarget::TList& s_target_list) {
-   return std::find_if(std::begin(s_target_list),
-                       std::end(s_target_list),
-                       [un_target_id] (const STarget& s_target) {
-                          return (s_target.Id == un_target_id);
-                       });
-}
-
 /**************** functions for transitions ****************/
 bool IsTargetLost() {
    auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
    if(itTarget == std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
-      std::cerr << "lift_actuator.position = " << static_cast<int>(Data.Actuators->ManipulatorModule.LiftActuator.Position.Value) << std::endl;
       return true;
    }
    return false;
@@ -192,41 +87,6 @@ bool IsNextTargetAcquired() {
       return true;
    }
    return false;
-}
-
-/**************** functions for locating corners ****************/
-using TCornerConstIterator = std::vector<std::pair<double, double> >::const_iterator;
-
-TCornerConstIterator FindTagCornerFurthestToTheRight(const STag& s_tag) {
-   return std::max_element(std::begin(s_tag.Corners),
-                           std::end(s_tag.Corners),
-                           [] (const std::pair<double, double>& c_pair_lhs, const std::pair<double, double>& c_pair_rhs) {
-                              return c_pair_lhs.first < c_pair_rhs.first;
-                           });
-}
-
-TCornerConstIterator FindTagCornerFurthestToTheLeft(const STag& s_tag) {
-   return std::min_element(std::begin(s_tag.Corners),
-                           std::end(s_tag.Corners),
-                           [] (const std::pair<double, double>& c_pair_lhs, const std::pair<double, double>& c_pair_rhs) {
-                              return c_pair_lhs.first < c_pair_rhs.first;
-                           });
-}
-
-TCornerConstIterator FindTagCornerFurthestToTheBottom(const STag& s_tag) {
-   return std::max_element(std::begin(s_tag.Corners),
-                           std::end(s_tag.Corners),
-                           [] (const std::pair<double, double>& c_pair_lhs, const std::pair<double, double>& c_pair_rhs) {
-                              return c_pair_lhs.second < c_pair_rhs.second;
-                           });
-}
-
-TCornerConstIterator FindTagCornerFurthestToTheTop(const STag& s_tag) {
-   return std::min_element(std::begin(s_tag.Corners),
-                           std::end(s_tag.Corners),
-                           [] (const std::pair<double, double>& c_pair_lhs, const std::pair<double, double>& c_pair_rhs) {
-                              return c_pair_lhs.second < c_pair_rhs.second;
-                           });
 }
 
 /**************** functions for control loops ****************/
@@ -516,9 +376,9 @@ public:
 /************************************************************/
 /*             Main state machine definition                */
 /************************************************************/
-class CManipulatorTestingTask : public CState {
+class CFiniteStateMachine : public CState {
 public:
-   CManipulatorTestingTask() :
+   CFiniteStateMachine() :
       CState("top_level_state", nullptr, nullptr, {
          CState("test"),
          CState("search_for_unused_block", nullptr, nullptr, {
@@ -595,6 +455,7 @@ public:
             CState("wait_for_zero_targets"),
             CState("wait_for_next_target"),
          }),
+         CStateMoveToTargetXZ("select_placement_target", OBSERVE_BLOCK_X_TARGET, OBSERVE_BLOCK_Z_TARGET, true),
          CState("approach_structure_far", nullptr, nullptr, {
             CStateSetLedColors("set_deck_color", CBlockDemo::EColor::GREEN),
             CStateMoveToTargetXZ("align_with_target", 0.000, PREAPPROACH_BLOCK_Z_TARGET, false),
@@ -673,10 +534,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() >= (M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using left approach" << std::endl;
-                  return true;
-               }
+               return (cEulerAngleZ.GetValue() >= (M_PI / 18.0));
             }
          }
          return false;
@@ -689,10 +547,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() <= -(M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using right approach" << std::endl;
-                  return true;
-               }
+               return (cEulerAngleZ.GetValue() <= -(M_PI / 18.0));
             }
          }
          return false;
@@ -705,11 +560,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() > -(M_PI / 18.0) &&
-                  cEulerAngleZ.GetValue() <  (M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using straight approach" << std::endl;
-                  return true;
-               }
+               return ((cEulerAngleZ.GetValue() > -(M_PI / 18.0)) && (cEulerAngleZ.GetValue() < (M_PI / 18.0)));
             }
          }
          return false;
@@ -868,6 +719,7 @@ public:
       AddTransition("search_for_structure", "count_visible_targets", [] {
          /* add a counting slot for the structure in focus */
          Data.FoundStructureSizes.push_front(1u);
+         Data.InspectedTargets.clear();
          return true;
       });
 
@@ -877,10 +729,12 @@ public:
          auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
          if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
             const SBlock& s_block = itTarget->Observations.front();
-            if(std::abs(s_block.Translation.GetZ() - OBSERVE_BLOCK_Z_TARGET) < OBSERVE_BLOCK_XZ_THRES) {
+            if((std::abs(s_block.Translation.GetX() - OBSERVE_BLOCK_X_TARGET) < OBSERVE_BLOCK_XZ_THRES) &&
+               (std::abs(s_block.Translation.GetZ() - OBSERVE_BLOCK_Z_TARGET) < OBSERVE_BLOCK_XZ_THRES)) {
                /* increment the number of targets found in the current structure */
                Data.FoundStructureSizes.front()++;
-               std::cerr << "structure.size = " << Data.FoundStructureSizes.front() << std::endl;
+               /* keep track of the targets we have already counted */
+               Data.InspectedTargets.push_front(itTarget->Id);
                return true;
             }
          }
@@ -888,7 +742,44 @@ public:
       });
       GetSubState("count_visible_targets").AddTransition("align_with_target", "wait_for_next_target", IsTargetLost);
       GetSubState("count_visible_targets").AddTransition("set_waiting_color", "wait_for_next_target");
-      GetSubState("count_visible_targets").AddTransition("wait_for_next_target", "set_alignment_color", IsNextTargetAcquired);
+      GetSubState("count_visible_targets").AddTransition("wait_for_next_target", "set_alignment_color", [] {
+         auto itTrackedTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
+         auto itCandidateNextTarget = std::end(Data.Sensors->ImageSensor.Detections.Targets);
+         std::cerr << "sTrackedBlock(" << itTrackedTarget->Id << ").x = " << itTrackedTarget->Observations.front().Translation.GetX() << std::endl;
+         for(auto it_other_target = std::begin(Data.Sensors->ImageSensor.Detections.Targets);
+             it_other_target != std::end(Data.Sensors->ImageSensor.Detections.Targets);
+             it_other_target++) {
+            if(std::find(std::begin(Data.InspectedTargets), std::end(Data.InspectedTargets), it_other_target->Id) != std::end(Data.InspectedTargets)) {
+               continue;
+            }
+            else {
+               const SBlock& sTrackedBlock = itTrackedTarget->Observations.front();
+               const SBlock& sOtherBlock = it_other_target->Observations.front();
+               argos::CVector3 cInterBlockDist = sOtherBlock.Translation - sTrackedBlock.Translation;
+               if(cInterBlockDist.GetX() > -0.025) {
+                  std::cerr << "sOtherBlock(" << it_other_target->Id << ").x = " << sOtherBlock.Translation.GetX() << std::endl;
+                  if(itCandidateNextTarget == std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+                     itCandidateNextTarget = it_other_target;
+                  }
+                  else {
+                     const SBlock& sCandidateNextBlock = itCandidateNextTarget->Observations.front();
+                     if((sCandidateNextBlock.Translation - sOtherBlock.Translation).GetX() > 0.000) {
+                        itCandidateNextTarget = it_other_target;
+                     }
+                  }
+               }
+            }
+         }
+         if(itCandidateNextTarget == std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+            std::cerr << "structure size = " << static_cast<int>(Data.FoundStructureSizes.front()) << std::endl;
+            Data.TrackedTargetId = FindMostRecentTarget(Data.Sensors->ImageSensor.Detections.Targets)->Id;
+            return false;
+         }
+         else {
+            Data.TrackedTargetId = itCandidateNextTarget->Id;
+            return true;
+         }
+      });
       /* next target not acquired => end of structure */
       GetSubState("count_visible_targets").AddExitTransition("wait_for_next_target");
 
@@ -898,10 +789,7 @@ public:
       });
       AddTransition("count_visible_targets", "approach_structure_far", [] {
          auto itMaxStructureSize = std::max_element(std::begin(Data.FoundStructureSizes), std::end(Data.FoundStructureSizes));
-         if(itMaxStructureSize == std::begin(Data.FoundStructureSizes)) {
-            return true;
-         }
-         return false;
+         return (itMaxStructureSize == std::begin(Data.FoundStructureSizes));
       });
       AddTransition("count_visible_targets", "search_for_previous_structure");
 
@@ -913,8 +801,25 @@ public:
       });
       GetSubState("search_for_previous_structure").AddExitTransition("wait_for_next_target", IsNextTargetAcquired);
 
-
-      AddTransition("search_for_previous_structure", "approach_structure_far");
+      /// Top level transitions ///
+      AddTransition("search_for_previous_structure", "select_placement_target");
+      AddTransition("select_placement_target", "approach_structure_far", [] {
+         auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
+         auto itRightmostTarget = FindTargetFurthestToTheRight(Data.Sensors->ImageSensor.Detections.Targets);
+         if((itRightmostTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) && 
+            (itRightmostTarget != itTarget)) {
+            Data.TrackedTargetId = itRightmostTarget->Id;
+            return false;
+         }
+         else if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+            const SBlock& s_block = itTarget->Observations.front();
+            return ((std::abs(s_block.Translation.GetX() - OBSERVE_BLOCK_X_TARGET) < OBSERVE_BLOCK_XZ_THRES) &&
+                    (std::abs(s_block.Translation.GetZ() - OBSERVE_BLOCK_Z_TARGET) < OBSERVE_BLOCK_XZ_THRES));
+         }
+         else {  
+            return false;
+         }
+      });
 
       /**************** approach_structure_far transitions ****************/
       GetSubState("approach_structure_far").AddTransition("set_deck_color", "align_with_target");
@@ -928,10 +833,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() >= (M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using left approach" << std::endl;
-                  return true;
-               }
+               return (cEulerAngleZ.GetValue() >= (M_PI / 18.0));
             }
          }
          return false;
@@ -944,10 +846,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() <= -(M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using right approach" << std::endl;
-                  return true;
-               }
+               return (cEulerAngleZ.GetValue() <= -(M_PI / 18.0));
             }
          }
          return false;
@@ -960,11 +859,7 @@ public:
                (std::abs(s_block.Translation.GetZ() - PREAPPROACH_BLOCK_Z_TARGET) < PREAPPROACH_BLOCK_XZ_THRES)) {
                argos::CRadians cEulerAngleZ, cEulerAngleY, cEulerAngleX;
                s_block.Rotation.ToEulerAngles(cEulerAngleZ, cEulerAngleY, cEulerAngleX);
-               if(cEulerAngleZ.GetValue() > -(M_PI / 18.0) &&
-                  cEulerAngleZ.GetValue() <  (M_PI / 18.0)) {
-                  std::cerr << "Target angle = " << argos::ToDegrees(cEulerAngleZ).GetValue() << ": Using straight approach" << std::endl;
-                  return true;
-               }
+               return ((cEulerAngleZ.GetValue() > -(M_PI / 18.0)) && (cEulerAngleZ.GetValue() <  (M_PI / 18.0)));
             }
          }
          return false;

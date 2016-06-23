@@ -17,4 +17,11 @@ struct STarget {
    unsigned int Id = 0;
 };
 
+/* functions for working with a list of targets */
+STarget::TConstListIterator FindTargetFurthestToTheLeft(const STarget::TList& s_target_list);
+STarget::TConstListIterator FindTargetFurthestToTheRight(const STarget::TList& s_target_list);
+STarget::TConstListIterator FindTrackedTarget(unsigned int un_target_id, const STarget::TList& s_target_list);
+STarget::TConstListIterator FindMostRecentTarget(const STarget::TList& s_target_list);
+STarget::TConstListIterator FindTargetWithMostQ4Leds(const STarget::TList& s_target_list);
+
 #endif
