@@ -22,9 +22,11 @@ struct STag {
 
 std::ostream& operator<<(std::ostream& c_output_stream, ELedState e_led_state);
 
-STag::TCoordinateConstIterator FindTagCornerFurthestToTheLeft(const STag& s_tag);
-STag::TCoordinateConstIterator FindTagCornerFurthestToTheRight(const STag& s_tag);
-STag::TCoordinateConstIterator FindTagCornerFurthestToTheBottom(const STag& s_tag);
-STag::TCoordinateConstIterator FindTagCornerFurthestToTheTop(const STag& s_tag);
+const STag::TCoordinate& FindTagCornerFurthestToTheLeft(const STag& s_tag);
+const STag::TCoordinate& FindTagCornerFurthestToTheRight(const STag& s_tag);
+const STag::TCoordinate& FindTagCornerFurthestToTheBottom(const STag& s_tag);
+const STag::TCoordinate& FindTagCornerFurthestToTheTop(const STag& s_tag);
+
+const STag::TCoordinate& GetTagCenter(const STag& s_tag);
 
 #endif
