@@ -3,7 +3,6 @@
 
 #include <string>
 #include <list>
-#include <deque>
 
 #include "structure.h"
 #include "target.h"
@@ -12,7 +11,8 @@
 
 #include <apriltag/image_u8.h>
 
-#define NUM_LEDS 12
+#define NUM_CHASSIS_DEVICES 12
+#define RF_HISTORY_LEN 5
 
 class CPacketControlInterface;
 class CTCPImageSocket;
@@ -22,6 +22,7 @@ class CFrameAnnotator;
 class CStructureAnalyser;
 class CISSCaptureDevice;
 class CLED;
+class CRangeFinder;
 class CFiniteStateMachine;
 
 class CBlockDemo {
@@ -109,7 +110,7 @@ public:
                bool Top = false, Bottom = false;
             } LimitSwitches;
             struct {
-               std::deque<uint8_t> Charge;
+               std::list<uint8_t> Charge;
             } Electromagnets;
             struct {
                uint8_t Position = 0;
@@ -122,6 +123,7 @@ public:
          std::chrono::time_point<std::chrono::steady_clock> Time;
          unsigned int Ticks = 0;
       } Clock;
+      std::array<std::list<uint16_t>, 12> RangeFinders;
    };
 
    struct SActuatorData {
@@ -173,6 +175,7 @@ private:
    CPacketControlInterface* m_pcManipulatorInterface;
 
    std::vector<CLED> m_vecLEDs;
+   std::vector<CRangeFinder> m_vecRangeFinders;
 
    CISSCaptureDevice* m_pcISSCaptureDevice;
    CTCPImageSocket* m_pcTCPImageSocket;

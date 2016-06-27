@@ -29,6 +29,7 @@
 #include "image_processing_pipeline.h"
 #include "leds.h"
 #include "packet_control_interface.h"
+#include "rfs.h"
 #include "structure_analyser.h"
 #include "tcp_image_socket.h"
 
@@ -36,6 +37,7 @@
 //#include "quantitative_stigmergy_experiment.h"
 #include "pyramid_experiment.h"
 
+unsigned int ManipulatorErrors = 0;
 
 const std::string INDENT = "   ";
 
@@ -157,7 +159,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
       }
    }
 
-   /* check the battery level of the manipulator module */
+   /* check the battery levels for the system and actuator circuits */
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_BATT_LVL);
    if(m_pcPowerManagementInterface->WaitForPacket(1000, 5)) {
       const CPacketControlInterface::CPacket& cPacket = m_pcPowerManagementInterface->GetPacket();
@@ -175,7 +177,7 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
       std::cerr << "Warning: Could not read the system/actuator battery levels" << std::endl;
    }
 
-   /* check the battery levels for the system and actuator circuits */
+   /* check the battery level of the manipulator module */
    m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_BATT_LVL);
    if(m_pcManipulatorInterface->WaitForPacket(1000, 5)) {
       const CPacketControlInterface::CPacket& cPacket = m_pcManipulatorInterface->GetPacket();
@@ -231,8 +233,13 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
    }
 
    /* Link to the LEDs */
-   for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_LEDS; un_dev_idx++) {
+   for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_CHASSIS_DEVICES; un_dev_idx++) {
       m_vecLEDs.emplace_back("/sys/class/leds/", "pca963x:led_deck", un_dev_idx);
+   }
+
+   /* Link to the rangefinders */
+   for(unsigned int un_dev_idx = 0; un_dev_idx < NUM_CHASSIS_DEVICES; un_dev_idx++) {
+      m_vecRangeFinders.emplace_back("/sys/class/rfs/", "bebot:rf_chassis", un_dev_idx);
    }
 
    /* Create the block sensor/tracker instances */
@@ -371,6 +378,7 @@ void CBlockDemo::Exec() {
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
    }
+
    /* grab a couple frames to allow the sensor to adjust to the lighting conditions */
    for(unsigned int unNumberFrames = 5; unNumberFrames > 0; unNumberFrames--) {
       m_pcISSCaptureDevice->Grab();
@@ -539,12 +547,43 @@ void CBlockDemo::Exec() {
                continue;
             }
          }
-         if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tManipQueryStart).count() > 1000) {
-            std::cerr << "manip not resp" << std::endl;
+         if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tManipQueryStart).count() > 250) {
+            /* TODO remove test code */
+            tManipQueryStart = std::chrono::steady_clock::now();
+            ManipulatorErrors++;
+            std::cerr << "!! manipulator not responding !!" << std::endl;
+            if(bWaitingForRfResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
+               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+               std::cerr << "1" << std::endl;
+            }
+            if(bWaitingForLiftActuatorPositionResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
+               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+               std::cerr << "2" << std::endl;
+            }
+            if(bWaitingForLiftActuatorStateResponse) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
+               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+               std::cerr << "3" << std::endl;
+            }
+            if(bWaitingForElectromagnetCharge) {
+               m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
+               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+               std::cerr << "4" << std::endl;
+            }
+         }
+      }
+   
+      /* sample chassis range finders */
+      for(unsigned int unRfIdx = 0; unRfIdx < NUM_CHASSIS_DEVICES; unRfIdx++) {
+         m_psSensorData->RangeFinders[unRfIdx].push_front(m_vecRangeFinders[unRfIdx].Read());
+         if(m_psSensorData->RangeFinders[unRfIdx].size() > RF_HISTORY_LEN) {
+            m_psSensorData->RangeFinders[unRfIdx].pop_back();
          }
       }
 
-      /* Store the experiment timer and the control tick counter */
+      /* store the experiment timer and the control tick counter */
       m_psSensorData->Clock.ExperimentStart = m_tpExperimentStart;
       m_psSensorData->Clock.Time = tpDetectionTimestamp;
       m_psSensorData->Clock.Ticks = unControlTick;
@@ -562,10 +601,16 @@ void CBlockDemo::Exec() {
          cTrackingInfo << ' ';
       }
       if(cTrackingInfo.str() != strLastTrackingInfo) {
-         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " tracking status:" << std::endl
+         std::cerr << '[' << std::setfill('0') << std::setw(8) << nFrameIdx << ']' << " tracking status:" << std::endl
                    << INDENT << ((cTrackingInfo.str() == "") ? std::string("()") : cTrackingInfo.str()) << std::endl;
          strLastTrackingInfo = cTrackingInfo.str();
       }
+
+      /*
+      for(STarget& s_target : tTrackedTargetList) {
+         std::cerr << s_target.Id << ": " << s_target.Observations.front().Translation << std::endl;
+      }
+      */
 
       /******** STEP THE TASK ********/
       bool bTaskIsComplete = m_pcFiniteStateMachine->Step();
@@ -574,7 +619,7 @@ void CBlockDemo::Exec() {
       std::ostringstream cStateInfo;
       cStateInfo << *m_pcFiniteStateMachine;
       if(cStateInfo.str() != strLastStateInfo) {
-         std::cerr << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " transition:" << std::endl
+         std::cerr << '[' << std::setfill('0') << std::setw(8) << nFrameIdx << ']' << " transition:" << std::endl
                    << INDENT << strLastStateInfo << " =>" << std::endl
                    << INDENT << cStateInfo.str() << std::endl;
          strLastStateInfo = cStateInfo.str();
@@ -610,7 +655,7 @@ void CBlockDemo::Exec() {
       }
 
       /* LED Deck */
-      for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_LEDS; unLEDIdx++) {
+      for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_CHASSIS_DEVICES; unLEDIdx++) {
          if(m_psActuatorData->LEDDeck.UpdateReq[unLEDIdx]) {
             switch(m_psActuatorData->LEDDeck.Color[unLEDIdx]) {
             case EColor::RED:
@@ -683,7 +728,7 @@ void CBlockDemo::Exec() {
 
       /* Exit if the shutdown signal was recieved or the state machine performed an exit transition */
       if(bShutdownSignal || bTaskIsComplete) {
-         std::cerr << '\r' << '[' << std::setfill('0') << std::setw(7) << nFrameIdx << ']' << " shutdown requested:" << std::endl;
+         std::cerr << '\r' << '[' << std::setfill('0') << std::setw(8) << nFrameIdx << ']' << " shutdown requested:" << std::endl;
          break;
       }
    }
@@ -711,7 +756,7 @@ void CBlockDemo::Exec() {
    /* shutdown async image processing pipeline */
    m_ptrCaptureOp->SetEnable(false);
    /* Switch off LEDs */
-   for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_LEDS; unLEDIdx++) {
+   for(unsigned int unLEDIdx = 0; unLEDIdx < NUM_CHASSIS_DEVICES; unLEDIdx++) {
       m_vecLEDs.at(unLEDIdx).SetRed(0x00); m_vecLEDs.at(unLEDIdx).SetGreen(0x00); m_vecLEDs.at(unLEDIdx).SetBlue(0x00);
    }
    /* Disable the actuator power domain */
@@ -720,6 +765,10 @@ void CBlockDemo::Exec() {
    m_pcPowerManagementInterface->SendPacket(CPacketControlInterface::CPacket::EType::SET_ACTUATOR_INPUT_LIMIT_OVERRIDE,
                                             static_cast<const uint8_t>(EActuatorInputLimit::LAUTO));
 
+   if(ManipulatorErrors > 0) {
+      std::cerr << INDENT << "manipulator errors: " << ManipulatorErrors << std::endl;
+   }
+   
    std::cerr << INDENT << "shutdown" << std::endl;
 }
 
