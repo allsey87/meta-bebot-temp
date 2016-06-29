@@ -313,6 +313,33 @@ int CBlockDemo::Init(int n_arg_count, char* ppch_args[]) {
 /****************************************/
 /****************************************/
 
+std::ostream& operator<<(std::ostream& c_stream, CBlockDemo::ELiftActuatorSystemState e_state) {
+   switch(e_state) {
+      case CBlockDemo::ELiftActuatorSystemState::INACTIVE:
+         c_stream << "INACTIVE";
+      break;
+      case CBlockDemo::ELiftActuatorSystemState::ACTIVE_POSITION_CTRL:
+         c_stream << "ACTIVE_POSITION_CTRL";
+      break;
+      case CBlockDemo::ELiftActuatorSystemState::ACTIVE_SPEED_CTRL:
+         c_stream << "ACTIVE_SPEED_CTRL";
+      break;
+      case CBlockDemo::ELiftActuatorSystemState::CALIBRATION_SRCH_TOP:
+         c_stream << "CALIBRATION_SRCH_TOP";
+      break;
+      case CBlockDemo::ELiftActuatorSystemState::CALIBRATION_SRCH_BTM:
+         c_stream << "CALIBRATION_SRCH_BTM";
+      break;
+      default:
+         c_stream << "UNDEFINED";
+      break;
+   }
+   return c_stream;
+}
+
+/****************************************/
+/****************************************/
+
 void CBlockDemo::Exec() {
    /* useful values for sending over packet control interface */
    enum class EActuatorInputLimit : uint8_t {
@@ -607,13 +634,33 @@ void CBlockDemo::Exec() {
       }
 
       /*
-      for(STarget& s_target : tTrackedTargetList) {
-         std::cerr << s_target.Id << ": " << s_target.Observations.front().Translation << std::endl;
+      auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
+      if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+         const SBlock& s_block = itTarget->Observations.front();
+         std::cerr << "x = " << s_block.Translation.GetX() << " (" << PREAPPROACH_BLOCK_X_TARGET << ")" << std::endl;
+         std::cerr << "z = " << s_block.Translation.GetZ() << " (" << PREAPPROACH_BLOCK_Z_TARGET << ")" << std::endl;
       }
       */
 
+      /*
+      for(STarget& s_target : tTrackedTargetList) {
+         std::cerr << "Target[" << s_target.Id;
+         const SBlock& s_block = s_target.Observations.front();
+         double fStructureDistanceYZ = 
+            std::hypot(s_block.Translation.GetY(), s_block.Translation.GetZ()) * 
+            argos::Sin(-argos::ATan2(s_block.Translation.GetY(), s_block.Translation.GetZ()) + argos::CRadians::PI_OVER_FOUR);        
+         std::cerr << "] fDist = " << fStructureDistanceYZ << std::endl;
+      }
+      */
+
+      auto itPyramidTarget = FindPyramidTarget(tTrackedTargetList);
+      if(itPyramidTarget != std::end(tTrackedTargetList)) {
+         std::cerr << "Pyramid target " << itPyramidTarget->Id << " (" << GetBlockLedState(itPyramidTarget->Observations.front()) << ")" << std::endl;
+      }
+
+
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = m_pcFiniteStateMachine->Step();
+      bool bTaskIsComplete = false; //m_pcFiniteStateMachine->Step();
 
       /* Output the current state of the state machine if a transition occurred */
       std::ostringstream cStateInfo;
