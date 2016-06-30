@@ -653,14 +653,15 @@ void CBlockDemo::Exec() {
       }
       */
 
+      /*
       auto itPyramidTarget = FindPyramidTarget(tTrackedTargetList);
       if(itPyramidTarget != std::end(tTrackedTargetList)) {
          std::cerr << "Pyramid target " << itPyramidTarget->Id << " (" << GetBlockLedState(itPyramidTarget->Observations.front()) << ")" << std::endl;
       }
-
+      */
 
       /******** STEP THE TASK ********/
-      bool bTaskIsComplete = false; //m_pcFiniteStateMachine->Step();
+      bool bTaskIsComplete = m_pcFiniteStateMachine->Step();
 
       /* Output the current state of the state machine if a transition occurred */
       std::ostringstream cStateInfo;
