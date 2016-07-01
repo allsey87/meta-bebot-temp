@@ -537,6 +537,7 @@ public:
             }
             return false;
          });
+         AddTransition("align_with_tag_offset", "set_reverse_velocity", IsTargetLost);
          AddTransition("approach_target", "set_reverse_velocity", IsTargetLost);
          AddTransition("set_reverse_velocity", "adjust_lift_actuator_height");
          // back off until target is re-acquired
@@ -1021,8 +1022,6 @@ public:
          CStateSetLiftActuatorPosition("raise_lift_actuator", LIFT_ACTUATOR_MAX_HEIGHT),
          CState("wait_for_next_target"),
          CStateMoveToTargetXZ("align_with_target", PREAPPROACH_BLOCK_X_TARGET, PREAPPROACH_BLOCK_Z_TARGET, false), // initial check if this is a seed block / structure
-         
-         
       }) {
 
       // TODO: Remove - testing
@@ -1156,7 +1155,6 @@ public:
          }
          return false;
       });
-
    }
 };
 
