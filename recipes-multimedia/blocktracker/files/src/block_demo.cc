@@ -635,7 +635,9 @@ void CBlockDemo::Exec() {
 
       /*
       auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
-      if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+      if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {       
+         std::cerr << "selected LED state: " << GetBlockLedState(itTarget->Observations.front()) << std::endl;
+      
          const SBlock& s_block = itTarget->Observations.front();
          std::cerr << "x = " << s_block.Translation.GetX() << " (" << PREAPPROACH_BLOCK_X_TARGET << ")" << std::endl;
          std::cerr << "z = " << s_block.Translation.GetZ() << " (" << PREAPPROACH_BLOCK_Z_TARGET << ")" << std::endl;

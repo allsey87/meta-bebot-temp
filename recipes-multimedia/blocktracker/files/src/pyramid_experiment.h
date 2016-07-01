@@ -802,9 +802,15 @@ public:
          });
 
          AddExitTransition("approach_target", [] {
+            bool bTargetInRange = false;
             auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
-            bool bTargetInRange = (itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) && 
-                                  (GetAdjBlockTranslation(itTarget->Observations.front()).GetX() < 0.085);
+            if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+               const SBlock& s_block = itTarget->Observations.front();
+               double fStructureDistanceYZ = 
+                  std::hypot(s_block.Translation.GetY(), s_block.Translation.GetZ()) * 
+                  argos::Sin(-argos::ATan2(s_block.Translation.GetY(), s_block.Translation.GetZ()) + argos::CRadians::PI_OVER_FOUR);
+               bTargetInRange = (fStructureDistanceYZ < 0.085);
+            }
             bool bTargetLost = IsTargetLost();
             bool bLiftActuatorAtBottom =
                (Data.Actuators->ManipulatorModule.LiftActuator.Position.Value <= (LIFT_ACTUATOR_MIN_HEIGHT + (0.5 * LIFT_ACTUATOR_BLOCK_HEIGHT)));
@@ -851,6 +857,7 @@ public:
          CStateMoveToTargetX("align_with_structure", PREPLACEMENT_BLOCK_X_TARGET, false),
          CStateSetVelocity("set_zero_velocity", 0.000, 0.000),
          CStateSetLedColors("set_deck_color_red", CBlockDemo::EColor::RED),
+         CStateSetLiftActuatorPosition("set_lift_actuator_base_height", LIFT_ACTUATOR_MIN_HEIGHT + (0.5 * LIFT_ACTUATOR_BLOCK_HEIGHT)),
          // if no targets place block, otherwise, if targets check led colors
          CState("increment_lift_actuator_height", [] {
             Data.Actuators->ManipulatorModule.LiftActuator.Position.Value += LIFT_ACTUATOR_BLOCK_HEIGHT;
@@ -994,15 +1001,15 @@ public:
          AddTransition("align_with_structure", "set_reverse_velocity", IsTargetLost);
 
          AddTransition("set_zero_velocity", "set_deck_color_red");
-         AddTransition("set_deck_color_red", "wait_for_lift_actuator");
-         //AddTransition("set_lift_actuator_base_height", "wait_for_lift_actuator");
+         AddTransition("set_deck_color_red", "set_lift_actuator_base_height");
+         AddTransition("set_lift_actuator_base_height", "wait_for_lift_actuator");
          AddTransition("increment_lift_actuator_height", "wait_for_lift_actuator");
 
          // extend structure vertically
          AddTransition("wait_for_lift_actuator", "increment_lift_actuator_height", [] {
             if(Data.Sensors->ManipulatorModule.LiftActuator.State == CBlockDemo::ELiftActuatorSystemState::INACTIVE) {
-               auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
-               if(itTarget != std::end(Data.Sensors->ImageSensor.Detections.Targets)) {
+               if((!IsTargetLost()) || IsNextTargetAcquired()) {
+                  auto itTarget = FindTrackedTarget(Data.TrackedTargetId, Data.Sensors->ImageSensor.Detections.Targets);
                   const SBlock& s_block = itTarget->Observations.front();
                   ELedState eBlockLedState = GetBlockLedState(s_block);
                   unsigned int unBlockLevel = GetBlockLevel(s_block, Data.Sensors->ManipulatorModule.LiftActuator.EndEffector.Position);
@@ -1014,7 +1021,7 @@ public:
                      Data.NextLedStateToAssign = ELedState::Q2;
                      return true;
                   }
-               }
+               }              
             }
             return false;
          });
