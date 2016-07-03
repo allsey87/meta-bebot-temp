@@ -123,7 +123,7 @@ void CFrameAnnotator::Annotate(const SStructure& s_structure,
                                const std::string& s_text) {
 
    /* draw the block */
-   for(const STarget::TListIterator& s_target_iter : s_structure.Members) {
+   for(const STarget::TConstListIterator& s_target_iter : s_structure.Members) {
       //Annotate(s_target_iter->Observations.front(), c_color);
       Annotate(*s_target_iter, c_color, "[" + std::to_string(s_target_iter->Id) + "]");
    }

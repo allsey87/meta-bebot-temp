@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-void CStructureAnalyser::DetectStructures(STarget::TList& lst_targets,
+void CStructureAnalyser::DetectStructures(const STarget::TList& lst_targets,
                                           SStructure::TList& lst_structures) {
    /***********************************************/
    /*         clear previous structures           */
@@ -54,8 +54,8 @@ void CStructureAnalyser::DetectStructures(STarget::TList& lst_targets,
              itSourceStructure != std::end(lstStructuresMatchingTarget);
              itSourceStructure++) {
             /* move targets */
-            std::list<STarget::TListIterator>& lstDestinationStructureMembers = (*itDestinationStructure)->Members;
-            std::list<STarget::TListIterator>& lstSourceStructureMembers = (*itSourceStructure)->Members;
+            std::list<STarget::TConstListIterator>& lstDestinationStructureMembers = (*itDestinationStructure)->Members;
+            std::list<STarget::TConstListIterator>& lstSourceStructureMembers = (*itSourceStructure)->Members;
             lstDestinationStructureMembers.splice(std::end(lstDestinationStructureMembers),
                                                   lstSourceStructureMembers);
             /* remove the empty source structure */

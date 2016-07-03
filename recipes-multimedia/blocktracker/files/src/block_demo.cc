@@ -34,8 +34,8 @@
 #include "tcp_image_socket.h"
 
 //#include "qualitative_stigmergy_experiment.h"
-//#include "quantitative_stigmergy_experiment.h"
-#include "pyramid_experiment.h"
+#include "quantitative_stigmergy_experiment.h"
+//#include "pyramid_experiment.h"
 
 unsigned int ManipulatorErrors = 0;
 
@@ -578,26 +578,21 @@ void CBlockDemo::Exec() {
             /* TODO remove test code */
             tManipQueryStart = std::chrono::steady_clock::now();
             ManipulatorErrors++;
-            std::cerr << "!! manipulator not responding !!" << std::endl;
             if(bWaitingForRfResponse) {
                m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_RF_RANGE);
                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-               std::cerr << "1" << std::endl;
             }
             if(bWaitingForLiftActuatorPositionResponse) {
                m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_POSITION);
                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-               std::cerr << "2" << std::endl;
             }
             if(bWaitingForLiftActuatorStateResponse) {
                m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_LIFT_ACTUATOR_STATE);
                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-               std::cerr << "3" << std::endl;
             }
             if(bWaitingForElectromagnetCharge) {
                m_pcManipulatorInterface->SendPacket(CPacketControlInterface::CPacket::EType::GET_EM_ACCUM_VOLTAGE);
                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-               std::cerr << "4" << std::endl;
             }
          }
       }

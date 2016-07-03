@@ -13,7 +13,7 @@ class CStructureAnalyser {
 public:
    CStructureAnalyser() {}
 
-   void DetectStructures(STarget::TList& lst_targets,
+   void DetectStructures(const STarget::TList& lst_targets,
                          SStructure::TList& lst_structures);
 
    //void CalculateTransform(To, From, Translation, Rotation)
